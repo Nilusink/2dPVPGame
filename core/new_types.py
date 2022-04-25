@@ -76,6 +76,9 @@ class Vec2:
 
         return facing, other
 
+    def copy(self):
+        return Vec2().from_cartesian(x=self.x, y=self.y)
+
     # maths
     def __add__(self, other):
         if issubclass(type(other), Vec2):

@@ -105,6 +105,11 @@ class _CollisionDestroyed(pg.sprite.Group):
                         if dmg != 0:
                             other.hit_someone(target_hp=hp)
 
+    def box_collide(self, other: pg.sprite.Sprite) -> tp.Iterator:
+        for sprite in self.sprites():
+            if pg.sprite.collide_rect(sprite, other) and sprite is not other:
+                yield sprite
+
 
 class _HasBars(pg.sprite.Group):
     """
@@ -126,8 +131,8 @@ class _HasBars(pg.sprite.Group):
 
                 pg.draw.rect(
                     surface,
-                    (50, 50, 50, 255),
-                    pg.Rect(sprite.position.x, sprite.position.y, now_len, bar_height)
+                    (0, 0, 0, 128),
+                    pg.Rect(sprite.position.x, sprite.position.y, max_len, bar_height)
                 )
                 pg.draw.rect(
                     surface,
@@ -139,8 +144,8 @@ class _HasBars(pg.sprite.Group):
                 now_len = (sprite.cooldown / sprite.weapon.cooldown) * max_len
                 pg.draw.rect(
                     surface,
-                    (50, 50, 50, 255),
-                    pg.Rect(sprite.position.x, sprite.position.y + 1.5 * bar_height, now_len, bar_height)
+                    (0, 0, 0, 128),
+                    pg.Rect(sprite.position.x, sprite.position.y + 1.5 * bar_height, max_len if now_len else 0, bar_height)
                 )
                 pg.draw.rect(
                     surface,

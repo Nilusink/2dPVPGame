@@ -23,10 +23,10 @@ class Bullet(pg.sprite.Sprite):
     __original_image: pg.Surface
     __position: Vec2
 
-    def __init__(self, position: Vec2, velocity: Vec2, parent: pg.sprite.Sprite):
+    def __init__(self, position: Vec2, direction: Vec2, parent: pg.sprite.Sprite, initial_velocity: Vec2 = Vec2()):
         super().__init__()
         self.__position = position
-        self.velocity = velocity
+        self.velocity = direction
         self.last_angle = 0
         self.parent = parent
 
@@ -35,6 +35,7 @@ class Bullet(pg.sprite.Sprite):
         self.speed: float
 
         self.velocity.length = self.speed
+        self.velocity += initial_velocity.split_vector(direction)[0]
 
         img = pg.image.load(self.character_path)
         img = pg.transform.scale(img, (self._size, self._size))
@@ -118,13 +119,27 @@ class Rocket(Bullet):
         self.on_death()
 
     def on_death(self) -> None:
+        size = Vec2.from_cartesian(100, 100)
         play_animation(
             directory=self.explosion_animation,
-            position=self.position,
-            size=Vec2.from_cartesian(100, 100),
+            position=self.position.copy(),
+            size=size,
             surface=Game.top_layer,
-            delay=.1
+            delay=.05
         )
+
+        hit_box = pg.sprite.Sprite()
+        hit_box.rect = pg.rect.Rect(
+            self.position.x - size.x / 2,
+            self.position.y - size.y / 2,
+            size.x,
+            size.y
+        )
+
+        for sprite in CollisionDestroyed.box_collide(hit_box):
+            if sprite is not self:
+                sprite.hit(self.damage)
+
         self.kill()
 
 
@@ -347,7 +362,12 @@ class Player(pg.sprite.Sprite):
         """
         # bullet spawner
         if self.shoots:
-            b = self.weapon(position=self.position + self.bullet_offset, velocity=direction, parent=self)
+            b = self.weapon(
+                position=self.position + self.bullet_offset,
+                direction=direction,
+                parent=self,
+                initial_velocity=self.velocity
+            )
             self.__bullets.append(b)
             self.cooldown += b.cooldown
 

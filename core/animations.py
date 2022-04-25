@@ -20,8 +20,8 @@ def play_animation(directory, position, size, surface, delay=.2):
     position.y -= size.y / 2
 
     def inner():
-        images = os.listdir(directory)
-        print(f"{images=}")
+        images = [file for file in os.listdir(directory) if file.endswith(".png")]
+        images.sort()
         for image in images:
             img = pg.image.load(directory+"/"+image)
             img = pg.transform.scale(img, (size.x, size.y))
