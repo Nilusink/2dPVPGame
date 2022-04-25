@@ -2,6 +2,7 @@
 Author:
 Nilusink
 """
+from core.basegame import Game
 from core import *
 
 
