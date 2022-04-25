@@ -39,7 +39,7 @@ class Bullet(pg.sprite.Sprite):
         img = pg.image.load(self.character_path)
         img = pg.transform.scale(img, (self._size, self._size))
         self.__original_image = img
-        self.image = img
+        self.image = pg.transform.rotate(self.__original_image, -self.velocity.angle * (180/PI))
         self.rect = pg.Rect(self.__position.x, self.__position.y, self._size, self._size)
 
         self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected)
@@ -63,7 +63,7 @@ class Bullet(pg.sprite.Sprite):
         self.__position += self.velocity * delta
 
         if self.out_of_bounds or self.on_ground:
-            self.kill()
+            self.on_death()
 
         self.image = pg.transform.rotate(self.__original_image, -self.velocity.angle * (180/PI))
         self.last_angle = self.velocity.angle
@@ -77,6 +77,11 @@ class Bullet(pg.sprite.Sprite):
 
     def hit(self, _damage: float) -> None:
         self.on_death()
+
+    def hit_someone(self, target_hp: float) -> None:
+        self.damage -= target_hp
+        if self.damage <= 0:
+            self.on_death()
 
     def on_death(self) -> None:
         self.kill()
@@ -107,7 +112,10 @@ class Rocket(Bullet):
     def hit(self, damage):
         self.hp -= damage
         if self.hp <= 0:
-            self.kill()
+            self.on_death()
+
+    def hit_someone(self, target_hp: float) -> None:
+        self.on_death()
 
     def on_death(self) -> None:
         play_animation(
@@ -115,8 +123,9 @@ class Rocket(Bullet):
             position=self.position,
             size=Vec2.from_cartesian(100, 100),
             surface=Game.top_layer,
-            delay=.2
+            delay=.1
         )
+        self.kill()
 
 
 class Sniper(Bullet):
@@ -355,7 +364,9 @@ class Player(pg.sprite.Sprite):
         print(f"revived")
         # reset variables
         self.position = Vec2.from_cartesian(self.__spawn.x, self.__spawn.y)
+        self.velocity = Vec2()
         self.hp = self.max_hp
+        self.update(delta=0)
 
         # re-ad to groups
         self.add(*self.__groups)

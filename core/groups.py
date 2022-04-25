@@ -96,16 +96,14 @@ class _CollisionDestroyed(pg.sprite.Group):
                         # print(f"collision: {sprite}, {other}")
                         try:
                             dmg = other.damage
-                            dmg_left = dmg - sprite.hp
 
                         except AttributeError:
                             dmg = 0
-                            dmg_left = 0
 
+                        hp = sprite.hp
                         sprite.hit(dmg)
-                        if dmg_left <= 0 and dmg != 0:
-                            other.on_death()
-                            other.kill()
+                        if dmg != 0:
+                            other.hit_someone(target_hp=hp)
 
 
 class _HasBars(pg.sprite.Group):

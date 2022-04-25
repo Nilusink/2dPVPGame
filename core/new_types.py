@@ -23,32 +23,32 @@ class Vec2:
 
     # variable getters / setters
     @property
-    def x(self) -> float:
+    def x(self):
         return self.__x
 
     @x.setter
-    def x(self, value: float) -> None:
+    def x(self, value):
         self.__x = value
         self.__update("c")
 
     @property
-    def y(self) -> float:
+    def y(self):
         return self.__y
 
     @y.setter
-    def y(self, value: float) -> None:
+    def y(self, value):
         self.__y = value
         self.__update("c")
 
     @property
-    def angle(self) -> float:
+    def angle(self):
         """
         value in radian
         """
         return self.__angle
 
     @angle.setter
-    def angle(self, value: float) -> None:
+    def angle(self, value):
         """
         value in radian
         """
@@ -56,16 +56,16 @@ class Vec2:
         self.__update("p")
 
     @property
-    def length(self) -> float:
+    def length(self):
         return self.__length
 
     @length.setter
-    def length(self, value: float) -> None:
+    def length(self, value):
         self.__length = value
         self.__update("p")
 
     # interaction
-    def split_vector(self, direction: "Vec2") -> tuple["Vec2", "Vec2"]:
+    def split_vector(self, direction):
         """
         :param direction: A vector facing in the wanted direction
         :return: tuple[Vector in only that direction, everything else]
@@ -77,29 +77,29 @@ class Vec2:
         return facing, other
 
     # maths
-    def __add__(self, other) -> "Vec2":
-        if type(other) == Vec2:
+    def __add__(self, other):
+        if issubclass(type(other), Vec2):
             return Vec2.from_cartesian(x=self.x + other.x, y=self.y + other.y)
 
         return Vec2.from_cartesian(x=self.x + other, y=self.y + other)
 
-    def __sub__(self, other) -> "Vec2":
-        if type(other) == Vec2:
+    def __sub__(self, other):
+        if issubclass(type(other), Vec2):
             return Vec2.from_cartesian(x=self.x - other.x, y=self.y - other.y)
 
         return Vec2.from_cartesian(x=self.x - other, y=self.y - other)
 
-    def __mul__(self, other) -> "Vec2":
-        if type(other) == Vec2:
+    def __mul__(self, other):
+        if issubclass(type(other), Vec2):
             return Vec2.from_polar(angle=self.angle + other.angle, length=self.length * other.length)
 
         return Vec2.from_cartesian(x=self.x * other, y=self.y * other)
 
-    def __truediv__(self, other) -> "Vec2":
+    def __truediv__(self, other):
         return Vec2.from_cartesian(x=self.x / other, y=self.y / other)
 
     # internal functions
-    def __update(self, calc_from: str) -> None:
+    def __update(self, calc_from):
         """
         :param calc_from: polar (p) | cartesian (c)
         """
@@ -114,10 +114,10 @@ class Vec2:
         else:
             raise ValueError("Invalid value for \"calc_from\"")
 
-    def __abs__(self) -> float:
+    def __abs__(self):
         return np.sqrt(self.x**2 + self.y**2)
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         return f"<\n" \
                f"\tVec2:\n" \
                f"\tx:{self.x}\ty:{self.y}\n" \
@@ -127,7 +127,7 @@ class Vec2:
     # static methods.
     # creation of new instances
     @staticmethod
-    def from_cartesian(x: float, y: float) -> "Vec2":
+    def from_cartesian(x, y) -> "Vec2":
         p = Vec2()
         p.x = x
         p.y = y
@@ -135,7 +135,7 @@ class Vec2:
         return p
 
     @staticmethod
-    def from_polar(angle: float, length: float) -> "Vec2":
+    def from_polar(angle, length) -> "Vec2":
         p = Vec2()
         while angle > 2*PI:
             angle -= 2*PI

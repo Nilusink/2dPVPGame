@@ -39,6 +39,7 @@ class _Game:
 
         self.__platforms: list[dict] = []
         self.__world_config: dict = {}
+        self.__to_blit: list[tuple[pg.Surface, pg.Surface, Vec2]] = []
 
         self.load_world(world_path)
 
@@ -133,7 +134,7 @@ class _Game:
             self.__pressed_keys[key] = eval(f"_keys[pg.K_{key}]")
 
         # put to mouse
-        FollowsMouse.update()
+        FollowsMouse.update(self.top_layer)
 
         # calculate stuff
         GravityAffected.calculate_gravity(delta)
@@ -150,6 +151,9 @@ class _Game:
         HasBars.draw(self.top_layer)
 
         # draw updated objects and world
+        for element in self.__to_blit.copy():
+            element[0].blit(element[1], (element[2].x, element[2].y))
+
         self.draw_world()
         Updated.draw(self.middle_layer)
 
@@ -159,6 +163,13 @@ class _Game:
         self.screen.blit(self.top_layer, (0, 0))
 
         self.__last = now
+
+    def blit(self, surface: pg.Surface, image: pg.Surface, position: Vec2) -> tuple[pg.Surface, pg.Surface, Vec2]:
+        self.__to_blit.append((surface, image, position))
+        return surface, image, position
+
+    def unblit(self, element: tuple[pg.Surface, pg.Surface, Vec2]) -> None:
+        self.__to_blit.remove(element)
 
     @staticmethod
     def end() -> None:

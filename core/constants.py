@@ -12,7 +12,7 @@ WINDOW_SIZE: tuple[int, int] = (1920, 1080)
 
 # WEAPON config
 BULLET_COOLDOWN: float = .1
-ROCKET_COOLDOWN: float = 20
+ROCKET_COOLDOWN: float = 2
 SNIPER_COOLDOWN: float = 8
 
 BULLET_DAMAGE: float = 1
