@@ -314,7 +314,8 @@ class Player(pg.sprite.Sprite):
         self.rect = pg.Rect(self.position.x, self.position.y - self.size, self.size, self.size)
 
     def update(self, delta: float) -> None:
-        self.cooldown = self.cooldown - delta / T_MULT if self.cooldown > 0 else 0
+        for i, cooldown in enumerate(self.__cooldown):
+            self.__cooldown[i] = cooldown - delta / T_MULT if cooldown > 0 else 0
 
         if Game.is_pressed(self.controls[0]):
             self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
