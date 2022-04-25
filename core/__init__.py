@@ -2,17 +2,18 @@
 Author:
 Nilusink
 """
+from threading import Timer
 import string
 import json
 import time
 import os
 
-from constants import *
-from groups import *
+from core.constants import *
+from core.groups import *
 
 
 class _Game:
-    def __init__(self, world_path: str, window_size: tuple[int, int] = ...) -> None:
+    def __init__(self, world_path: str, window_size: tuple[int, int] = ...):
         # initialize pygame
         pg.init()
         pg.font.init()
@@ -57,7 +58,7 @@ class _Game:
         for platform in self.__platforms:
             pg.draw.rect(self.lowest_layer, platform["color"], pg.Rect(*platform["pos"], *platform["size"]))
 
-    def on_floor(self, point: Vec2) -> bool:
+    def on_floor(self, point: Vec2):
         """
         takes a point and checks if it is on the floor
         """
@@ -233,7 +234,7 @@ class Bullet(pg.sprite.Sprite):
 
 
 class AK47(Bullet):
-    character_path: str = "images/weapons/bullet.png"
+    character_path: str = "./images/weapons/bullet.png"
     cooldown = BULLET_COOLDOWN
     damage = BULLET_DAMAGE
     speed = BULLET_SPEED
@@ -241,20 +242,26 @@ class AK47(Bullet):
 
 
 class Rocket(Bullet):
-    character_path = str = "images/weapons/rocket.png"
+    character_path = str = "./images/weapons/rocket.png"
     cooldown = ROCKET_COOLDOWN
     damage = ROCKET_DAMAGE
     speed = ROCKET_SPEED
     _size = 64
+    hp = 2
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.add(WallBouncer)
 
+    def hit(self, damage):
+        self.hp -= damage
+        if self.hp <= 0:
+            self.kill()
+
 
 class Sniper(Bullet):
-    character_path: str = "images/weapons/bullet.png"
+    character_path: str = "./images/weapons/bullet.png"
     cooldown = SNIPER_COOLDOWN
     damage = SNIPER_DAMAGE
     speed = SNIPER_SPEED
@@ -265,12 +272,12 @@ class Player(pg.sprite.Sprite):
     character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
 
     def __init__(self,
-                 position: Vec2,
+                 spawn_point,
                  *groups,
-                 velocity: Vec2 = ...,
-                 controls: tuple[str, str, str] = ("", "", ""),
-                 shoots: bool = False
-                 ) -> None:
+                 velocity=...,
+                 controls=("", "", ""),
+                 shoots=False
+                 ):
 
         if velocity is ...:
             velocity = Vec2()
@@ -286,7 +293,8 @@ class Player(pg.sprite.Sprite):
         self.__weapon: tp.Type[Bullet] = self.__available_weapons[self.__weapon_index]
 
         # player meta
-        self.position = position
+        self.__spawn = spawn_point
+        self.position = Vec2.from_cartesian(spawn_point.x, spawn_point.y)
         self.velocity = velocity
         self.controls = controls
         self.shoots = shoots
@@ -317,35 +325,36 @@ class Player(pg.sprite.Sprite):
         self.update_rect()
 
         # add to the player group
-        self.add(Players, Updated, GravityAffected, FrictionXAffected, CollisionDestroyed, HasBars)
+        self.__groups = [Players, Updated, GravityAffected, FrictionXAffected, CollisionDestroyed, HasBars]
+        self.add(*self.__groups)
 
         self.__weapon_indicator: WeaponIndicator = ...
         if self.shoots:
             self.__weapon_indicator = WeaponIndicator(Vec2.from_cartesian(0, 0), self.weapon)
 
     @property
-    def weapon(self) -> tp.Type[Bullet]:
+    def weapon(self):
         return self.__weapon
 
     @weapon.setter
-    def weapon(self, weapon: tp.Type[Bullet]) -> None:
+    def weapon(self, weapon):
         if self.shoots:
             self.__weapon = weapon
             self.__weapon_indicator.weapon = weapon
 
     @property
-    def available_weapons(self) -> tuple:
+    def available_weapons(self):
         return self.__available_weapons
 
     @property
-    def weapon_index(self) -> int:
+    def weapon_index(self):
         """
         state the index of the currently selected weapon out of available_weapons
         """
         return self.__weapon_index
 
     @weapon_index.setter
-    def weapon_index(self, index: int) -> None:
+    def weapon_index(self, index):
         a_num = len(self.__available_weapons)
         while index >= a_num:
             index -= a_num
@@ -357,15 +366,15 @@ class Player(pg.sprite.Sprite):
         self.weapon = self.available_weapons[self.weapon_index]
 
     @property
-    def size(self) -> int:
+    def size(self):
         return self.__size
 
     @property
-    def facing(self) -> str:
+    def facing(self):
         return self.__facing
 
     @facing.setter
-    def facing(self, direction: str) -> None:
+    def facing(self, direction):
         direction = direction.lower()
         if direction not in "left, right":
             raise ValueError(f"Invalid Direction: \"{direction}\"")
@@ -382,25 +391,25 @@ class Player(pg.sprite.Sprite):
                 self.bullet_offset.x = -self.size/2
 
     @property
-    def on_ground(self) -> bool:
+    def on_ground(self):
         return Game.on_floor(self.position) and self.velocity.y >= 0
 
     @property
-    def max_hp(self) -> float:
+    def max_hp(self):
         return self.__max_hp
 
     @property
-    def cooldown(self) -> float:
+    def cooldown(self):
         return self.__cooldown[self.weapon_index]
 
     @cooldown.setter
-    def cooldown(self, value: float) -> None:
+    def cooldown(self, value):
         self.__cooldown[self.weapon_index] = value
 
-    def update_rect(self) -> None:
+    def update_rect(self):
         self.rect = pg.Rect(self.position.x, self.position.y - self.size, self.size, self.size)
 
-    def update(self, delta: float) -> None:
+    def update(self, delta):
         self.cooldown = self.cooldown - delta / T_MULT if self.cooldown > 0 else 0
 
         if Game.is_pressed(self.controls[0]):
@@ -443,7 +452,7 @@ class Player(pg.sprite.Sprite):
         # update on screen
         self.update_rect()
 
-    def shoot(self, direction: Vec2) -> None:
+    def shoot(self, direction):
         """
         shoot a bulletin the direction of the vector
         """
@@ -453,14 +462,24 @@ class Player(pg.sprite.Sprite):
             self.__bullets.append(b)
             self.cooldown += b.cooldown
 
-    def hit(self, damage: float) -> None:
+    def hit(self, damage):
         self.hp -= damage
         if self.hp <= 0:
             self.kill()
+            Timer(4.20, self.revive).start()
+
+    def revive(self):
+        print(f"revived")
+        # reset variables
+        self.position = Vec2.from_cartesian(self.__spawn.x, self.__spawn.y)
+        self.hp = self.max_hp
+
+        # re-ad to groups
+        self.add(*self.__groups)
 
 
 class Scope(pg.sprite.Sprite):
-    character_path: str = "images/weapons/scope.png"
+    character_path: str = "./images/weapons/scope.png"
 
     def __init__(self):
         super().__init__()

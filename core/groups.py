@@ -2,9 +2,9 @@
 Author:
 Nilusink
 """
-from constants import g, WINDOW_SIZE
+from core.constants import g, WINDOW_SIZE
 from contextlib import suppress
-from new_types import Vec2
+from core.new_types import Vec2
 import pygame as pg
 import typing as tp
 
