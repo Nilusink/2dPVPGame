@@ -80,8 +80,9 @@ class Connection(socket.socket):
                 case "shot":
                     weapon: tp.Type[Bullet] = eval(event["weapon"])
                     direction = Vec2.from_polar(angle=event["angle"], length=1)
+                    pos = Vec2.from_cartesian(event["pos"]["x"], event["pos"]["y"])
                     weapon(
-                        position=player.position + player.bullet_offset,
+                        position=pos,
                         direction=direction,
                         parent=player
                     )

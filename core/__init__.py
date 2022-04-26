@@ -158,6 +158,7 @@ class Player(pg.sprite.Sprite):
     shoots: bool
     velocity: Vec2
     position: Vec2
+    respawns: bool
     image: pg.Surface
     bullet_offset: Vec2
     parent: pg.sprite.Sprite
@@ -187,6 +188,7 @@ class Player(pg.sprite.Sprite):
                  velocity: Vec2 = ...,
                  controls: tuple[str, str, str] = ("", "", ""),
                  shoots: bool = False,
+                 respawns: bool = False,
                  name: str = ""
                  ) -> None:
 
@@ -208,6 +210,7 @@ class Player(pg.sprite.Sprite):
         self.position = Vec2.from_cartesian(spawn_point.x, spawn_point.y)
         self.velocity = velocity
         self.controls = controls
+        self.respawns = respawns
         self.shoots = shoots
         self.name = name
 
@@ -325,14 +328,13 @@ class Player(pg.sprite.Sprite):
         for i, cooldown in enumerate(self.__cooldown):
             self.__cooldown[i] = cooldown - delta / T_MULT if cooldown > 0 else 0
 
-        if self.on_ground:
-            if Game.is_pressed(self.controls[0]):
-                self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
+        if Game.is_pressed(self.controls[0]):
+            self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
 
-            if Game.is_pressed(self.controls[1]):
-                self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
+        if Game.is_pressed(self.controls[1]):
+            self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
 
-            if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
+        if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
                 self.velocity.x = 0
 
         if Game.is_pressed(self.controls[2]) and self.on_ground:
@@ -372,8 +374,9 @@ class Player(pg.sprite.Sprite):
         """
         # bullet spawner
         if self.shoots:
+            pos = self.position + self.bullet_offset
             b = self.weapon(
-                position=self.position + self.bullet_offset,
+                position=pos,
                 direction=direction,
                 parent=self,
                 initial_velocity=self.velocity
@@ -384,7 +387,11 @@ class Player(pg.sprite.Sprite):
             self.__events.append({
                 "type": "shot",
                 "weapon": self.weapon.__name__,
-                "angle": direction.angle
+                "angle": direction.angle,
+                "pos": {
+                    "x": pos.x,
+                    "y": pos.y,
+                }
             })
 
     def hit(self, damage: float) -> None:
@@ -394,7 +401,8 @@ class Player(pg.sprite.Sprite):
 
     def on_death(self) -> None:
         self.kill()
-        Timer(4.20, self.revive).start()
+        if self.respawns:
+            Timer(4.20, self.revive).start()
 
     def revive(self) -> None:
         print(f"revived")

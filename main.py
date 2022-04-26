@@ -8,11 +8,12 @@ from core import *
 
 
 TYPE: str = "server"   # can be "connect" or "server"
+SERVER_IP: str = "127.0.0.1"
 
 
 def main() -> None:
     server = Connection(
-        ("127.0.0.1", 12345)
+        (SERVER_IP, 12345)
     )
     main_player = Player(spawn_point=Vec2.from_cartesian(
         x=100,
@@ -21,7 +22,9 @@ def main() -> None:
         "d",
         "a",
         "SPACE"
-    ), shoots=True,
+    ),
+        shoots=True,
+        respawns=True,
         name=str(randint(1, 10000000))
     )
 
