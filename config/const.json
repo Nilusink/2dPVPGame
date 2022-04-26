@@ -22,7 +22,7 @@
 
         "BULLET_SPEED": 200,
         "ROCKET_SPEED": 100,
-        "HOMING_ROCKET_SPEED": 70,
+        "HOMING_ROCKET_SPEED": 50,
         "SNIPER_SPEED": 600,
 
         "MAX_SPEED": 50,
