@@ -10,7 +10,7 @@ class ConfigPermissionError (Exception):
     ...
 
 
-class _confhive:
+class _Confhive:
     def __init__(self, hivefile: str) -> None:
         self.__hivefile = hivefile
 
@@ -27,7 +27,7 @@ class _confhive:
             # load arguments
             setattr(self, key, value)
 
-    def setkey(self, config_key: str, value: Any) -> None:
+    def set_key(self, config_key: str, value: Any) -> None:
         if self.__wprot:
             raise ConfigPermissionError(f"Config hive {self.__hivename} is write protected")
         
@@ -39,6 +39,6 @@ class _confhive:
 
 
 
-user = _confhive("config/user.json")
-const = _confhive("config/const.json")
-dyn = _confhive("config/dyn.json")
+user = _Confhive("config/user.json")
+const = _Confhive("config/const.json")
+dyn = _Confhive("config/dyn.json")
