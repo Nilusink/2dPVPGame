@@ -43,7 +43,7 @@ class Bullet(pg.sprite.Sprite):
         self.image = pg.transform.rotate(self.__original_image, -self.velocity.angle * (180/PI))
         self.rect = pg.Rect(self.__position.x, self.__position.y, self._size, self._size)
 
-        self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected)
+        self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
 
     @property
     def position(self) -> Vec2:
@@ -162,6 +162,7 @@ class Player(pg.sprite.Sprite):
     position: Vec2
     velocity: Vec2
     shoots: bool
+    name: str
     hp: float
     __weapon_indicator: "WeaponIndicator"
     __weapon_index: int = 0
@@ -180,7 +181,8 @@ class Player(pg.sprite.Sprite):
                  *groups_,
                  velocity: Vec2 = ...,
                  controls: tuple[str, str, str] = ("", "", ""),
-                 shoots: bool = False
+                 shoots: bool = False,
+                 name: str = ""
                  ) -> None:
 
         if velocity is ...:
@@ -202,6 +204,7 @@ class Player(pg.sprite.Sprite):
         self.velocity = velocity
         self.controls = controls
         self.shoots = shoots
+        self.name = name
 
         # player config
         self.max_speed = MAX_SPEED
@@ -222,10 +225,11 @@ class Player(pg.sprite.Sprite):
 
         self.__cooldown: list[float] = [0] * len(self.available_weapons)
 
-        self.image = pg.image.load(self.character_path
-                                   .replace("SIZE", str(self.size))
-                                   .replace("DIRECTION", self.facing))
-
+        image = pg.image.load(self.character_path
+                              .replace("SIZE", str(self.__size))
+                              .replace("DIRECTION", self.facing)
+                              )
+        self.image = pg.transform.scale(image, (self.__size, self.__size))
         self.update_rect()
 
         # add to the player group
