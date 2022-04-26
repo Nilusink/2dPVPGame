@@ -33,11 +33,10 @@ class GameSocket(socket.socket):
                         if index == 0:
                             continue
 
-                        store_bytes = False
                         # store rest of bytes for next call
                         self.input_buffer = current_buffer[index:]
                         # parse msg_body as json and return
-                        return json.loads(self.msg_body)
+                        return json.loads(msg_body)
 
                     case _:  # content
                         if store_bytes:    # only store bytes between start and end marker

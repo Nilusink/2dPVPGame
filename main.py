@@ -25,6 +25,14 @@ def main() -> None:
         name=str(randint(1, 10000000))
     )
 
+    dummy = Player(
+        spawn_point=Vec2.from_cartesian(
+            x=1000,
+            y=50
+        ),
+        respawns=True
+    )
+
     _scope = Scope()
 
     Turret(
