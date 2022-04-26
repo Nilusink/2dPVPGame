@@ -2,9 +2,9 @@
 Author:
 Nilusink
 """
-from core.constants import g, WINDOW_SIZE
 from contextlib import suppress
 from core.new_types import Vec2
+import core.config as config
 import pygame as pg
 import typing as tp
 
@@ -29,7 +29,7 @@ class _GravityAffected(pg.sprite.Group):
             with suppress(AttributeError):
                 sprite: tp.Any
                 if not sprite.on_ground or sprite.velocity.y < 0:
-                    sprite.velocity.y += g * delta
+                    sprite.velocity.y += config.const.g * delta
                     continue
 
                 while sprite.on_ground:
@@ -166,13 +166,13 @@ class _WallBouncer(pg.sprite.Group):
                 if 0 > sprite.position.x:
                     sprite.velocity.x = abs(sprite.velocity.x)
 
-                elif sprite.position.x > WINDOW_SIZE[0]:
+                elif sprite.position.x > config.const.WINDOW_SIZE[0]:
                     sprite.velocity.x = -abs(sprite.velocity.x)
 
                 if 0 > sprite.position.y:
                     sprite.velocity.y = abs(sprite.velocity.y)
 
-                elif sprite.position.y > WINDOW_SIZE[1]:
+                elif sprite.position.y > config.const.WINDOW_SIZE[1]:
                     sprite.velocity.y = -abs(sprite.velocity.y)
 
 

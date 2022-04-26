@@ -7,7 +7,7 @@ from threading import Timer
 import numpy as np
 
 from core.basegame import Game
-from core.constants import *
+import core.config as config
 from core.groups import *
 
 
@@ -41,7 +41,7 @@ class Bullet(pg.sprite.Sprite):
         img = pg.image.load(self.character_path)
         img = pg.transform.scale(img, (self._size, self._size))
         self._original_image = img
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
         self.rect = pg.Rect(self._position.x, self._position.y, self._size, self._size)
 
         self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
@@ -57,8 +57,8 @@ class Bullet(pg.sprite.Sprite):
     @property
     def out_of_bounds(self) -> bool:
         return all([
-            not -200 < self._position.x < WINDOW_SIZE[0] + 200,
-            not -200 < self._position.y < WINDOW_SIZE[1] + 200,
+            not -200 < self._position.x < config.const.WINDOW_SIZE[0] + 200,
+            not -200 < self._position.y < config.const.WINDOW_SIZE[1] + 200,
         ])
 
     def get_nearest_player(self, exclude_parent: bool) -> tp.Union["Player", None]:
@@ -82,7 +82,7 @@ class Bullet(pg.sprite.Sprite):
         if self.out_of_bounds or self.on_ground:
             self.on_death()
 
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
         self.last_angle = self.velocity.angle
 
         self.rect = pg.Rect(
@@ -106,18 +106,18 @@ class Bullet(pg.sprite.Sprite):
 
 class AK47(Bullet):
     character_path: str = "./images/weapons/bullet.png"
-    cooldown = BULLET_COOLDOWN
-    damage = BULLET_DAMAGE
-    speed = BULLET_SPEED
+    cooldown = config.const.BULLET_COOLDOWN
+    damage = config.const.BULLET_DAMAGE
+    speed = config.const.BULLET_SPEED
     _size = 16
 
 
 class Rocket(Bullet):
     explosion_animation: str = "./images/animations/explosion/"
     character_path: str = "./images/weapons/rocket.png"
-    cooldown = ROCKET_COOLDOWN
-    damage = ROCKET_DAMAGE
-    speed = ROCKET_SPEED
+    cooldown = config.const.ROCKET_COOLDOWN
+    damage = config.const.ROCKET_DAMAGE
+    speed = config.const.ROCKET_SPEED
     _size = 64
     hp = 2
 
@@ -161,28 +161,28 @@ class Rocket(Bullet):
 
 class HomingRocket(Rocket):
     acceleration: float = 5
-    speed = HOMING_ROCKET_SPEED
-    damage = HOMING_ROCKET_DAMAGE
-    cooldown = HOMING_ROCKET_COOLDOWN
+    speed = config.const.HOMING_ROCKET_SPEED
+    damage = config.const.HOMING_ROCKET_DAMAGE
+    cooldown = config.const.HOMING_ROCKET_COOLDOWN
     character_path: str = "./images/weapons/homingrocket.png"
     __grad_per_sec: float = 50
     __rad_per_sec: float
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.__rad_per_sec = self.__grad_per_sec * (PI / 180)
+        self.__rad_per_sec = self.__grad_per_sec * (config.const.PI / 180)
 
         self.remove(GravityAffected)
 
     def update(self, delta: float) -> None:
         target: Player = self.get_nearest_player(exclude_parent=True)
         if target:
-            position_delta = target.position - self.position
+            position_delta = target.position_center - self.position
             angle_delta = self.velocity.angle - position_delta.angle
 
-            to_change = (-angle_delta / abs(angle_delta)) * self.__rad_per_sec * (delta / T_MULT)
+            to_change = (-angle_delta / abs(angle_delta)) * self.__rad_per_sec * (delta / config.const.T_MULT)
 
-            if angle_delta > PI:
+            if angle_delta > config.const.PI:
                 to_change *= -1
 
             self.velocity.angle += to_change
@@ -194,7 +194,7 @@ class HomingRocket(Rocket):
         if self.out_of_bounds or self.on_ground:
             self.on_death()
 
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
         self.last_angle = self.velocity.angle
 
         self.rect = pg.Rect(
@@ -207,9 +207,9 @@ class HomingRocket(Rocket):
 
 class Sniper(Bullet):
     character_path: str = "./images/weapons/bullet.png"
-    cooldown = SNIPER_COOLDOWN
-    damage = SNIPER_DAMAGE
-    speed = SNIPER_SPEED
+    cooldown = config.const.SNIPER_COOLDOWN
+    damage = config.const.SNIPER_DAMAGE
+    speed = config.const.SNIPER_SPEED
     _size = 32
 
 
@@ -224,8 +224,8 @@ class Player(pg.sprite.Sprite):
     image: pg.Surface
     bullet_offset: Vec2
     parent: pg.sprite.Sprite
-    max_speed: float = MAX_SPEED
-    jump_speed: float = JUMP_SPEED
+    max_speed: float = config.const.MAX_SPEED
+    jump_speed: float = config.const.JUMP_SPEED
     controls: tuple[str, str, str]
     character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
 
@@ -235,7 +235,7 @@ class Player(pg.sprite.Sprite):
     __available_weapons: list
     __weapon: tp.Type[Bullet]
     __events: list[dict] = []
-    __max_hp: float = MAX_HP
+    __max_hp: float = config.const.MAX_HP
     __weapon_index: int = 0
     __cooldown: list[float]
     __facing: str = "right"
@@ -303,6 +303,10 @@ class Player(pg.sprite.Sprite):
         self.__weapon_indicator: WeaponIndicator = ...
         if self.shoots:
             self.__weapon_indicator = WeaponIndicator(Vec2.from_cartesian(0, 0), self.weapon)
+
+    @property
+    def position_center(self) -> Vec2:
+        return self.position + Vec2.from_cartesian(self.size, self.size)
 
     @property
     def events(self) -> list[dict]:
@@ -389,7 +393,7 @@ class Player(pg.sprite.Sprite):
 
     def update(self, delta: float) -> None:
         for i, cooldown in enumerate(self.__cooldown):
-            self.__cooldown[i] = cooldown - delta / T_MULT if cooldown > 0 else 0
+            self.__cooldown[i] = cooldown - delta / config.const.T_MULT if cooldown > 0 else 0
 
         if Game.is_pressed(self.controls[0]):
             self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
@@ -398,7 +402,7 @@ class Player(pg.sprite.Sprite):
             self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
 
         if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
-                self.velocity.x = 0
+            self.velocity.x = 0
 
         if Game.is_pressed(self.controls[2]) and self.on_ground:
             self.velocity.y -= self.jump_speed
@@ -566,7 +570,7 @@ class Turret(pg.sprite.Sprite):
         return closest_player
 
     def update(self, delta: float) -> None:
-        self.cooldown = self.cooldown - delta / T_MULT if self.cooldown > 0 else 0
+        self.cooldown = self.cooldown - delta / config.const.T_MULT if self.cooldown > 0 else 0
 
         target = self.get_nearest_player()
         if target:

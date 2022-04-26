@@ -6,7 +6,8 @@ melektron
 import json as j
 from typing import Any
 
-class ConfigPermissionError (Exception):
+
+class ConfigPermissionError(Exception):
     ...
 
 
@@ -36,8 +37,6 @@ class _Confhive:
         j.dump(self.__hive, fd)
         fd.close()
     
-
-
 
 user = _Confhive("config/user.json")
 const = _Confhive("config/const.json")

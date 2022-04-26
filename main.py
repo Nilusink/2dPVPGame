@@ -3,8 +3,8 @@ Author:
 Nilusink
 """
 
-import core.config as config
 from core.server_connecter import Connection
+import core.config as config
 from random import randint
 from core import *
 

@@ -2,7 +2,6 @@
 Author:
 Nilusink
 """
-from core.constants import *
 from core.groups import *
 import string
 import json
@@ -93,7 +92,7 @@ class _Game:
         delta = now - self.__last
 
         # for the right feel
-        delta *= T_MULT
+        delta *= config.const.T_MULT
 
         self.__last_pressed_keys = self.__pressed_keys.copy()
 
@@ -179,4 +178,4 @@ class _Game:
 
 
 # should be the only instance of the class
-Game = _Game("./worlds/world1.json", WINDOW_SIZE)
+Game = _Game("./worlds/world1.json", config.const.WINDOW_SIZE)
