@@ -1,7 +1,7 @@
+from core import Player, Bullet, AK47, Sniper, Rocket
 from core.groups import Players
 from core.new_types import Vec2
 from threading import Thread
-from core import Player
 import typing as tp
 import socket
 import json
@@ -28,7 +28,11 @@ class Connection(socket.socket):
         while self.running:
             try:
                 msg = self.recv(2048)
-                data: dict[str, tp.Any] = json.loads(msg.decode())
+                try:
+                    data: dict[str, tp.Any] = json.loads(msg.decode())
+
+                except:
+                    continue
 
                 selected_player: Player = ...
                 for player in Players.sprites():
@@ -55,7 +59,11 @@ class Connection(socket.socket):
                 "x": player.velocity.x,
                 "y": player.velocity.y,
             },
+            "events": player.events
         }
+
+        if msg["events"]:
+            print(f"{msg['events']=}")
 
         self.sendall(json.dumps(msg).encode())
 
@@ -64,3 +72,17 @@ class Connection(socket.socket):
         player.position = Vec2.from_cartesian(update_from["pos"]["x"], update_from["pos"]["y"])
         player.velocity = Vec2.from_cartesian(update_from["vel"]["x"], update_from["vel"]["y"])
         player.hp = update_from["hp"]
+
+        # handle events
+        for event in update_from["events"]:
+            print(f"caught event: {event}")
+            match event["type"]:
+                case "shot":
+                    weapon: tp.Type[Bullet] = eval(event["weapon"])
+                    direction = Vec2.from_polar(angle=event["angle"], length=1)
+                    weapon(
+                        position=player.position + player.bullet_offset,
+                        direction=direction,
+                        parent=player
+                    )
+                    print(f"shot with weapon {weapon}")

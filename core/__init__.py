@@ -152,29 +152,34 @@ class Sniper(Bullet):
 
 
 class Player(pg.sprite.Sprite):
-    character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
-    controls: tuple[str, str, str]
-    parent: pg.sprite.Sprite
-    bullet_offset: Vec2
-    jump_speed: float
-    image: pg.Surface
-    max_speed: float
-    position: Vec2
-    velocity: Vec2
-    shoots: bool
-    name: str
+    # public
     hp: float
+    name: str
+    shoots: bool
+    velocity: Vec2
+    position: Vec2
+    image: pg.Surface
+    bullet_offset: Vec2
+    parent: pg.sprite.Sprite
+    max_speed: float = MAX_SPEED
+    jump_speed: float = JUMP_SPEED
+    controls: tuple[str, str, str]
+    character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
+
+    # private
     __weapon_indicator: "WeaponIndicator"
-    __weapon_index: int = 0
+    __bullets: list[Bullet] = []
     __available_weapons: list
     __weapon: tp.Type[Bullet]
+    __events: list[dict] = []
+    __max_hp: float = MAX_HP
+    __weapon_index: int = 0
     __cooldown: list[float]
-    __bullets: list[Bullet]
+    __facing: str = "right"
     __groups: list | tuple
     __max_hp: float
-    __facing: str
     __spawn: Vec2
-    __size: int
+    __size: int = 32
 
     def __init__(self,
                  spawn_point: Vec2,
@@ -207,14 +212,7 @@ class Player(pg.sprite.Sprite):
         self.name = name
 
         # player config
-        self.max_speed = MAX_SPEED
-        self.jump_speed = JUMP_SPEED
-        self.__max_hp = MAX_HP
         self.hp = self.__max_hp
-
-        self.__size: int = 32
-        self.__facing: str = "right"
-        self.__bullets: list[Bullet] = []
 
         self.bullet_offset: Vec2 = Vec2.from_cartesian(
             x=self.size,
@@ -239,6 +237,12 @@ class Player(pg.sprite.Sprite):
         self.__weapon_indicator: WeaponIndicator = ...
         if self.shoots:
             self.__weapon_indicator = WeaponIndicator(Vec2.from_cartesian(0, 0), self.weapon)
+
+    @property
+    def events(self) -> list[dict]:
+        tmp = self.__events.copy()
+        self.__events.clear()
+        return tmp
 
     @property
     def weapon(self) -> tp.Type[Bullet]:
@@ -321,14 +325,15 @@ class Player(pg.sprite.Sprite):
         for i, cooldown in enumerate(self.__cooldown):
             self.__cooldown[i] = cooldown - delta / T_MULT if cooldown > 0 else 0
 
-        if Game.is_pressed(self.controls[0]):
-            self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
+        if self.on_ground:
+            if Game.is_pressed(self.controls[0]):
+                self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
 
-        if Game.is_pressed(self.controls[1]):
-            self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
+            if Game.is_pressed(self.controls[1]):
+                self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
 
-        if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
-            self.velocity.x = 0
+            if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
+                self.velocity.x = 0
 
         if Game.is_pressed(self.controls[2]) and self.on_ground:
             self.velocity.y -= self.jump_speed
@@ -375,6 +380,12 @@ class Player(pg.sprite.Sprite):
             )
             self.__bullets.append(b)
             self.cooldown += b.cooldown
+
+            self.__events.append({
+                "type": "shot",
+                "weapon": self.weapon.__name__,
+                "angle": direction.angle
+            })
 
     def hit(self, damage: float) -> None:
         self.hp -= damage

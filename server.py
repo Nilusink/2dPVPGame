@@ -42,7 +42,6 @@ class Server(socket.socket):
         while self.running:
             try:
                 msg = client.recv(2048)
-                print(f"received {msg}")
                 if msg == b"":
                     self.__clients.remove(client)
                     client.close()

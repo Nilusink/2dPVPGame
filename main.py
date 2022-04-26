@@ -3,6 +3,7 @@ Author:
 Nilusink
 """
 from core.server_connecter import Connection
+from random import randint
 from core import *
 
 
@@ -21,7 +22,7 @@ def main() -> None:
         "a",
         "SPACE"
     ), shoots=True,
-        name="Niggl"
+        name=str(randint(1, 10000000))
     )
 
     _scope = Scope()
