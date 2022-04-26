@@ -7,7 +7,6 @@ from random import randint
 from core import *
 
 
-TYPE: str = "server"   # can be "connect" or "server"
 SERVER_IP: str = "127.0.0.1"
 
 

@@ -62,9 +62,6 @@ class Connection(socket.socket):
             "events": player.events
         }
 
-        if msg["events"]:
-            print(f"{msg['events']=}")
-
         self.sendall(json.dumps(msg).encode())
 
     @staticmethod
@@ -75,7 +72,6 @@ class Connection(socket.socket):
 
         # handle events
         for event in update_from["events"]:
-            print(f"caught event: {event}")
             match event["type"]:
                 case "shot":
                     weapon: tp.Type[Bullet] = eval(event["weapon"])
