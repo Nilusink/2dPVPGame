@@ -20,8 +20,8 @@ class GameSocket(socket.socket):
         self.send(spacket.encode("ASCII"))
 
     def recv_packet(self) -> dict:
+        msg: bytes = b""
         while True:
-            msg: bytes = self.recv(1024)
             # include unused bytes from last receive
             current_buffer = self.input_buffer + msg
             for index, byte in enumerate(current_buffer):
@@ -44,3 +44,5 @@ class GameSocket(socket.socket):
                         if self.store_bytes:    # only store bytes between start and end marker
                             self.msg_body += current_buffer[index:index+1].decode("ASCII")
                         pass
+
+            msg: bytes = self.recv(1024)

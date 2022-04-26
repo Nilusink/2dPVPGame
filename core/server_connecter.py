@@ -1,10 +1,11 @@
-from core.gamesocket import GameSocket
+# from core.gamesocket import GameSocket
+import json
 from threading import Thread
 from core import *
 import socket
 
 
-class Connection(GameSocket):
+class Connection(socket.socket):
     running: bool = True
     __server_address: tuple[str, int]
 
@@ -19,6 +20,13 @@ class Connection(GameSocket):
     @property
     def server_address(self) -> tuple[str, int]:
         return self.__server_address
+
+    def recv_packet(self) -> dict:
+        msg = self.recv(4096).decode()
+        return json.loads(msg)
+
+    def send_packet(self, packet: dict) -> None:
+        self.sendall(json.dumps(packet).encode())
 
     def receive_player_data(self) -> None:
         self.settimeout(.2)

@@ -306,7 +306,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def position_center(self) -> Vec2:
-        return self.position + Vec2.from_cartesian(self.size, self.size)
+        return self.position + Vec2.from_cartesian(self.size/2, -self.size)
 
     @property
     def events(self) -> list[dict]:

@@ -4,7 +4,6 @@ Nilusink
 """
 
 from core.server_connecter import Connection
-import core.config as config
 from random import randint
 from core import *
 
@@ -28,12 +27,12 @@ def main() -> None:
 
     _scope = Scope()
 
-    # Turret(
-    #     position=Vec2.from_cartesian(
-    #         x=1000,
-    #         y=900
-    #     )
-    # )
+    Turret(
+        position=Vec2.from_cartesian(
+            x=1000,
+            y=900
+        )
+    )
 
     while True:
         Game.update()
