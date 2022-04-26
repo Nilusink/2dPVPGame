@@ -1,0 +1,8 @@
+{
+    "hivename": "const",
+    "writeprotect": true,
+    "keys": {
+        "mykey": 1245,
+        "two": "value"
+    }
+}

@@ -2,17 +2,16 @@
 Author:
 Nilusink
 """
+
+import core.config as config
 from core.server_connecter import Connection
 from random import randint
 from core import *
 
 
-SERVER_IP: str = "127.0.0.1"
-
-
 def main() -> None:
     server = Connection(
-        (SERVER_IP, 12345)
+        (config.dyn.server_ip, 12345)
     )
     main_player = Player(spawn_point=Vec2.from_cartesian(
         x=100,

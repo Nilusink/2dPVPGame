@@ -1,6 +1,6 @@
 {
     "hivename": "user",
-    "writprotect": false,
+    "writeprotect": false,
     "keys": {
         "mykey": 1245,
         "two": "value"
