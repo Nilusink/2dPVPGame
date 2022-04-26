@@ -2,15 +2,74 @@
 Author:
 Nilusink
 """
-from core.animations import play_animation
+from dataclasses import dataclass
 from threading import Timer
+from random import randint
 import numpy as np
 
+from core.animations import play_animation
 from core.basegame import Game
 import core.config as config
 from core.groups import *
 
+# Events
+# Event types
+SHOT: int = 0
+BULLET_UPDATE: int = 1
+PLAYER_UPDATE: int = 2
 
+
+# Event class
+@dataclass(frozen=True)
+class Event:
+    type: int
+
+    def to_dict(self) -> dict[str, str]:
+        """
+        convert the event to a dict
+        """
+        out = {
+            "name": type(self).__name__,
+        }
+        for key, item in self.__dict__.items():
+            if issubclass(type(item), Vec2):
+                out[key] = item.to_dict()
+
+            elif issubclass(type(item), Bullet):
+                out[key] = type(item).__name__
+
+            else:
+                out[key] = item
+
+        return out
+
+
+@dataclass(frozen=True)
+class Shot(Event):
+    parent: "Player"
+    position: Vec2
+    direction: Vec2
+    weapon: tp.Type["Bullet"]
+    id: int
+
+
+@dataclass(frozen=True)
+class BulletUpdate(Event):
+    position: Vec2
+    velocity: Vec2
+    damage: float
+    id: int
+
+
+@dataclass(frozen=True)
+class PlayerUpdate(Event):
+    position: Vec2
+    velocity: Vec2
+    damage: float
+    id: int
+
+
+# Weapons
 class Bullet(pg.sprite.Sprite):
     cooldown: float = 0
     speed: float = 0
@@ -23,6 +82,7 @@ class Bullet(pg.sprite.Sprite):
     rect: pg.Rect
     _original_image: pg.Surface
     _position: Vec2
+    id: int
 
     def __init__(self, position: Vec2, direction: Vec2, parent: pg.sprite.Sprite, initial_velocity: Vec2 = Vec2()):
         super().__init__()
@@ -43,6 +103,8 @@ class Bullet(pg.sprite.Sprite):
         self._original_image = img
         self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
         self.rect = pg.Rect(self._position.x, self._position.y, self._size, self._size)
+
+        self.id = randint(0, 1_000_000_000)
 
         self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
 
@@ -121,11 +183,6 @@ class Rocket(Bullet):
     _size = 64
     hp = 2
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-
-        self.add(WallBouncer)
-
     def hit(self, damage):
         self.hp -= damage
         if self.hp <= 0:
@@ -167,12 +224,24 @@ class HomingRocket(Rocket):
     character_path: str = "./images/weapons/homingrocket.png"
     __grad_per_sec: float = 50
     __rad_per_sec: float
+    __events: list[Event]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.__rad_per_sec = self.__grad_per_sec * (config.const.PI / 180)
 
+        self.__events = []
+
+        self._id = randint(0, 1_000_000_000)
+
+        self.add(UpdatesToNetwork)
         self.remove(GravityAffected)
+
+    @property
+    def events(self) -> list[Event]:
+        tmp = self.__events.copy()
+        self.__events.clear()
+        return tmp
 
     def update(self, delta: float) -> None:
         target: Player = self.get_nearest_player(exclude_parent=True)
@@ -204,6 +273,14 @@ class HomingRocket(Rocket):
             self._size
         )
 
+        self.__events.append(BulletUpdate(
+            type=BULLET_UPDATE,
+            position=self.position,
+            velocity=self.velocity,
+            damage=self.damage,
+            id=self.id
+        ))
+
 
 class Sniper(Bullet):
     character_path: str = "./images/weapons/bullet.png"
@@ -213,6 +290,7 @@ class Sniper(Bullet):
     _size = 32
 
 
+# Player kinds
 class Player(pg.sprite.Sprite):
     # public
     hp: float
@@ -452,13 +530,14 @@ class Player(pg.sprite.Sprite):
             self.cooldown += b.cooldown
 
             self.__events.append({
-                "type": "shot",
+                "type": SHOT,
                 "weapon": self.weapon.__name__,
                 "angle": direction.angle,
                 "pos": {
                     "x": pos.x,
                     "y": pos.y,
-                }
+                },
+                "id": b.id
             })
 
     def hit(self, damage: float) -> None:
@@ -474,6 +553,9 @@ class Player(pg.sprite.Sprite):
     def revive(self) -> None:
         print(f"revived")
         # reset variables
+        for i in range(len(self.__cooldown)):
+            self.__cooldown[i] = 0
+
         self.position = Vec2.from_cartesian(self.__spawn.x, self.__spawn.y)
         self.velocity = Vec2()
         self.hp = self.max_hp
@@ -483,6 +565,59 @@ class Player(pg.sprite.Sprite):
         self.add(*self.__groups)
 
 
+class Turret(pg.sprite.Sprite):
+    cooldown: float = 0
+    __character_path: str = "./images/characters/amogus/amogus48left.png"
+    __position: Vec2
+    __weapon: tp.Type[Bullet]
+
+    def __init__(self, position: Vec2) -> None:
+        super().__init__()
+        self.__position = position
+        self.__weapon = HomingRocket
+
+        self.image = pg.image.load(self.__character_path)
+        self.rect = pg.Rect(self.__position.x, self.__position.y, 48, 48)
+
+        self.add(Updated)
+
+    def get_nearest_player(self) -> Player | None:
+        closest_distance: float = np.inf
+        closest_player: Player | None = None
+        for player in Players.sprites():
+            player: Player
+            dist = abs((self.__position - player.position).length)
+            if dist < closest_distance:
+                closest_player = player
+                closest_distance = dist
+
+        return closest_player
+
+    def update(self, delta: float) -> None:
+        self.cooldown = self.cooldown - delta / config.const.T_MULT if self.cooldown > 0 else 0
+
+        target = self.get_nearest_player()
+        if target:
+            delta = target.position - self.__position
+            if delta.length < 1000:
+                self.shoot(delta)
+
+    def shoot(self, direction: Vec2) -> None:
+        """
+        shoot a bulletin the direction of the vector
+        """
+        # bullet spawner
+        if not self.cooldown:
+            pos = self.__position + Vec2.from_cartesian(x=0, y=-100)
+            b = self.__weapon(
+                position=pos,
+                direction=direction,
+                parent=self,
+            )
+            self.cooldown += b.cooldown / 4
+
+
+# GUI stuff
 class Scope(pg.sprite.Sprite):
     character_path: str = "./images/weapons/scope.png"
     image: pg.Surface
@@ -539,55 +674,3 @@ class WeaponIndicator(pg.sprite.Sprite):
         self.__weapon = weapon
         img = pg.image.load(self.character_path.replace("WEAPON", self.__weapon.__name__.lower()))
         self.image = pg.transform.scale(img, self.scale)
-
-
-class Turret(pg.sprite.Sprite):
-    cooldown: float = 0
-    __character_path: str = "./images/characters/amogus/amogus48left.png"
-    __position: Vec2
-    __weapon: tp.Type[Bullet]
-
-    def __init__(self, position: Vec2) -> None:
-        super().__init__()
-        self.__position = position
-        self.__weapon = HomingRocket
-
-        self.image = pg.image.load(self.__character_path)
-        self.rect = pg.Rect(self.__position.x, self.__position.y, 48, 48)
-
-        self.add(Updated)
-
-    def get_nearest_player(self) -> Player | None:
-        closest_distance: float = np.inf
-        closest_player: Player | None = None
-        for player in Players.sprites():
-            player: Player
-            dist = abs((self.__position - player.position).length)
-            if dist < closest_distance:
-                closest_player = player
-                closest_distance = dist
-
-        return closest_player
-
-    def update(self, delta: float) -> None:
-        self.cooldown = self.cooldown - delta / config.const.T_MULT if self.cooldown > 0 else 0
-
-        target = self.get_nearest_player()
-        if target:
-            delta = target.position - self.__position
-            if delta.length < 1000:
-                self.shoot(delta)
-
-    def shoot(self, direction: Vec2) -> None:
-        """
-        shoot a bulletin the direction of the vector
-        """
-        # bullet spawner
-        if not self.cooldown:
-            pos = self.__position + Vec2.from_cartesian(x=0, y=-100)
-            b = self.__weapon(
-                position=pos,
-                direction=direction,
-                parent=self,
-            )
-            self.cooldown += b.cooldown / 4

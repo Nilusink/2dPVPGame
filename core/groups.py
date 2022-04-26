@@ -18,6 +18,19 @@ class _Updated(pg.sprite.Group):
     ...
 
 
+class _UpdatesToNetwork(pg.sprite.Group):
+    # required functions / variables:
+    # events: list[Event]
+    ...
+
+
+class _NetworkUpdated(pg.sprite.Group):
+    def get_by_id(self, id: int):
+        for sprite in self.sprites():
+            if sprite.id == id:
+                return sprite
+
+
 class _GravityAffected(pg.sprite.Group):
     """
     required methods / variables:
@@ -179,10 +192,12 @@ class _WallBouncer(pg.sprite.Group):
 # create instances
 Players = _Players()
 Updated = _Updated()
-GravityAffected = _GravityAffected()
-FrictionXAffected = _FrictionXAffected()
-FrictionAffected = _FrictionAffected()
-CollisionDestroyed = _CollisionDestroyed()
-FollowsMouse = _FollowsMouse()
 HasBars = _HasBars()
 WallBouncer = _WallBouncer()
+FollowsMouse = _FollowsMouse()
+NetworkUpdated = _NetworkUpdated()
+GravityAffected = _GravityAffected()
+UpdatesToNetwork = _UpdatesToNetwork()
+FrictionAffected = _FrictionAffected()
+FrictionXAffected = _FrictionXAffected()
+CollisionDestroyed = _CollisionDestroyed()

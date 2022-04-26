@@ -2,6 +2,7 @@
 Author:
 Nilusink
 """
+import typing as tp
 import numpy as np
 
 
@@ -85,6 +86,14 @@ class Vec2:
     def copy(self):
         return Vec2().from_cartesian(x=self.x, y=self.y)
 
+    def to_dict(self) -> dict:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "angle": self.angle,
+            "length": self.length,
+        }
+
     # maths
     def __add__(self, other):
         if issubclass(type(other), Vec2):
@@ -154,3 +163,32 @@ class Vec2:
         p.length = length
 
         return p
+
+    @staticmethod
+    def from_dict(dictionary: dict) -> "Vec2":
+        if "x" in dictionary and "y" in dictionary:
+            return Vec2.from_cartesian(x=dictionary["x"], y=dictionary["y"])
+
+        elif "angle" in dictionary and "length" in dictionary:
+            return Vec2.from_polar(angle=dictionary["angle"], length=dictionary["length"])
+
+        else:
+            raise KeyError("either (x & y) or (angle & length) must be in dict!")
+
+
+class BetterDict:
+    """
+    each element is also accessible with instance.element
+    """
+    def __init__(self, **initial) -> None:
+        for key, value in initial.items():
+            setattr(self, key, value)
+
+    def __setitem__(self, key: str, value: tp.Any) -> None:
+        setattr(self, key, value)
+
+    def __getitem__(self, item: str) -> tp.Any:
+        return self.__dict__[item]
+
+    def __delitem__(self, key) -> None:
+        delattr(self, key)

@@ -54,6 +54,10 @@ class Connection(GameSocket):
             "events": player.events
         }
 
+        for bullet in UpdatesToNetwork:
+            events = [event.to_dict() for event in bullet.events]
+            msg["events"] += events
+
         self.send_packet(msg)
 
     @staticmethod
@@ -65,12 +69,26 @@ class Connection(GameSocket):
         # handle events
         for event in update_from["events"]:
             match event["type"]:
-                case "shot":
+                case 0:
                     weapon: tp.Type[Bullet] = eval(event["weapon"])
                     direction = Vec2.from_polar(angle=event["angle"], length=1)
                     pos = Vec2.from_cartesian(event["pos"]["x"], event["pos"]["y"])
-                    weapon(
+                    b = weapon(
                         position=pos,
                         direction=direction,
                         parent=player
                     )
+                    b.id = event["id"]
+                    b.add(NetworkUpdated)
+                    b.remove(UpdatesToNetwork)
+
+                case 1:
+                    bullet = NetworkUpdated.get_by_id(event["id"])
+                    if bullet:
+                        bullet: tp.Type[Bullet]
+                        bullet._position = Vec2.from_dict(event["position"])
+                        bullet.velocity = Vec2.from_dict(event["velocity"])
+                        bullet.damage = event["damage"]
+                        continue
+
+                    print(f"event for invalid bullet")
