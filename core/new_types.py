@@ -52,6 +52,12 @@ class Vec2:
         """
         value in radian
         """
+        while value > 2 * PI:
+            value -= 2 * PI
+
+        while value < 0:
+            value += 2 * PI
+
         self.__angle = value
         self.__update("p")
 

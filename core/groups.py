@@ -78,7 +78,6 @@ class _CollisionDestroyed(pg.sprite.Group):
     damage: float (optional, use if collision should damage the other object)
     hp: float (optional, sprite should either have damage or hp (or both))
     hit(damage: float) -> None
-    on_death() -> None
     kill() -> None
     """
     def update(self) -> None:

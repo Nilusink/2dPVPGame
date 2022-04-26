@@ -28,6 +28,13 @@ def main() -> None:
 
     _scope = Scope()
 
+    # Turret(
+    #     position=Vec2.from_cartesian(
+    #         x=1000,
+    #         y=900
+    #     )
+    # )
+
     while True:
         Game.update()
         server.send_update(main_player)

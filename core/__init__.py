@@ -4,6 +4,7 @@ Nilusink
 """
 from core.animations import play_animation
 from threading import Timer
+import numpy as np
 
 from core.basegame import Game
 from core.constants import *
@@ -20,12 +21,12 @@ class Bullet(pg.sprite.Sprite):
     velocity: Vec2
     damage: float
     rect: pg.Rect
-    __original_image: pg.Surface
-    __position: Vec2
+    _original_image: pg.Surface
+    _position: Vec2
 
     def __init__(self, position: Vec2, direction: Vec2, parent: pg.sprite.Sprite, initial_velocity: Vec2 = Vec2()):
         super().__init__()
-        self.__position = position
+        self._position = position
         self.velocity = direction
         self.last_angle = 0
         self.parent = parent
@@ -39,39 +40,54 @@ class Bullet(pg.sprite.Sprite):
 
         img = pg.image.load(self.character_path)
         img = pg.transform.scale(img, (self._size, self._size))
-        self.__original_image = img
-        self.image = pg.transform.rotate(self.__original_image, -self.velocity.angle * (180/PI))
-        self.rect = pg.Rect(self.__position.x, self.__position.y, self._size, self._size)
+        self._original_image = img
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
+        self.rect = pg.Rect(self._position.x, self._position.y, self._size, self._size)
 
         self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
 
     @property
     def position(self) -> Vec2:
-        return self.__position
+        return self._position
 
     @property
     def on_ground(self) -> bool:
-        return Game.on_floor(self.__position)
+        return Game.on_floor(self._position)
 
     @property
     def out_of_bounds(self) -> bool:
         return all([
-            not -200 < self.__position.x < WINDOW_SIZE[0] + 200,
-            not -200 < self.__position.y < WINDOW_SIZE[1] + 200,
+            not -200 < self._position.x < WINDOW_SIZE[0] + 200,
+            not -200 < self._position.y < WINDOW_SIZE[1] + 200,
         ])
 
+    def get_nearest_player(self, exclude_parent: bool) -> tp.Union["Player", None]:
+        closest_distance: float = np.inf
+        closest_player: Player | None = None
+        for player in Players.sprites():
+            if exclude_parent and player is self.parent:
+                continue
+
+            player: Player
+            dist = abs((self._position - player.position).length)
+            if dist < closest_distance:
+                closest_player = player
+                closest_distance = dist
+
+        return closest_player
+
     def update(self, delta: float) -> None:
-        self.__position += self.velocity * delta
+        self._position += self.velocity * delta
 
         if self.out_of_bounds or self.on_ground:
             self.on_death()
 
-        self.image = pg.transform.rotate(self.__original_image, -self.velocity.angle * (180/PI))
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
         self.last_angle = self.velocity.angle
 
         self.rect = pg.Rect(
-            self.__position.x - self._size / 2,
-            self.__position.y - self._size / 2,
+            self._position.x - self._size / 2,
+            self._position.y - self._size / 2,
             self._size,
             self._size
         )
@@ -143,6 +159,52 @@ class Rocket(Bullet):
         self.kill()
 
 
+class HomingRocket(Rocket):
+    acceleration: float = 5
+    speed = HOMING_ROCKET_SPEED
+    damage = HOMING_ROCKET_DAMAGE
+    cooldown = HOMING_ROCKET_COOLDOWN
+    character_path: str = "./images/weapons/homingrocket.png"
+    __grad_per_sec: float = 50
+    __rad_per_sec: float
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.__rad_per_sec = self.__grad_per_sec * (PI / 180)
+
+        self.remove(GravityAffected)
+
+    def update(self, delta: float) -> None:
+        target: Player = self.get_nearest_player(exclude_parent=True)
+        if target:
+            position_delta = target.position - self.position
+            angle_delta = self.velocity.angle - position_delta.angle
+
+            to_change = (-angle_delta / abs(angle_delta)) * self.__rad_per_sec * (delta / T_MULT)
+
+            if angle_delta > PI:
+                to_change *= -1
+
+            self.velocity.angle += to_change
+
+        self.velocity.length += self.acceleration * delta
+
+        self._position += self.velocity * delta
+
+        if self.out_of_bounds or self.on_ground:
+            self.on_death()
+
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / PI))
+        self.last_angle = self.velocity.angle
+
+        self.rect = pg.Rect(
+            self.position.x - self._size / 2,
+            self.position.y - self._size / 2,
+            self._size,
+            self._size
+        )
+
+
 class Sniper(Bullet):
     character_path: str = "./images/weapons/bullet.png"
     cooldown = SNIPER_COOLDOWN
@@ -201,7 +263,8 @@ class Player(pg.sprite.Sprite):
         self.__available_weapons: tuple = (
             AK47,
             Sniper,
-            Rocket
+            Rocket,
+            HomingRocket
         )
         self.__weapon: tp.Type[Bullet] = self.__available_weapons[self.__weapon_index]
 
@@ -472,3 +535,55 @@ class WeaponIndicator(pg.sprite.Sprite):
         self.__weapon = weapon
         img = pg.image.load(self.character_path.replace("WEAPON", self.__weapon.__name__.lower()))
         self.image = pg.transform.scale(img, self.scale)
+
+
+class Turret(pg.sprite.Sprite):
+    cooldown: float = 0
+    __character_path: str = "./images/characters/amogus/amogus48left.png"
+    __position: Vec2
+    __weapon: tp.Type[Bullet]
+
+    def __init__(self, position: Vec2) -> None:
+        super().__init__()
+        self.__position = position
+        self.__weapon = HomingRocket
+
+        self.image = pg.image.load(self.__character_path)
+        self.rect = pg.Rect(self.__position.x, self.__position.y, 48, 48)
+
+        self.add(Updated)
+
+    def get_nearest_player(self) -> Player | None:
+        closest_distance: float = np.inf
+        closest_player: Player | None = None
+        for player in Players.sprites():
+            player: Player
+            dist = abs((self.__position - player.position).length)
+            if dist < closest_distance:
+                closest_player = player
+                closest_distance = dist
+
+        return closest_player
+
+    def update(self, delta: float) -> None:
+        self.cooldown = self.cooldown - delta / T_MULT if self.cooldown > 0 else 0
+
+        target = self.get_nearest_player()
+        if target:
+            delta = target.position - self.__position
+            if delta.length < 1000:
+                self.shoot(delta)
+
+    def shoot(self, direction: Vec2) -> None:
+        """
+        shoot a bulletin the direction of the vector
+        """
+        # bullet spawner
+        if not self.cooldown:
+            pos = self.__position + Vec2.from_cartesian(x=0, y=-100)
+            b = self.__weapon(
+                position=pos,
+                direction=direction,
+                parent=self,
+            )
+            self.cooldown += b.cooldown / 4

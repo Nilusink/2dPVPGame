@@ -1,13 +1,10 @@
-from core import Player, Bullet, AK47, Sniper, Rocket
-from core.groups import Players
-from core.new_types import Vec2
+from core.gamesocket import GameSocket
 from threading import Thread
-import typing as tp
+from core import *
 import socket
-import json
 
 
-class Connection(socket.socket):
+class Connection(GameSocket):
     running: bool = True
     __server_address: tuple[str, int]
 
@@ -27,12 +24,7 @@ class Connection(socket.socket):
         self.settimeout(.2)
         while self.running:
             try:
-                msg = self.recv(2048)
-                try:
-                    data: dict[str, tp.Any] = json.loads(msg.decode())
-
-                except:
-                    continue
+                data = self.recv_packet()
 
                 selected_player: Player = ...
                 for player in Players.sprites():
@@ -62,7 +54,7 @@ class Connection(socket.socket):
             "events": player.events
         }
 
-        self.sendall(json.dumps(msg).encode())
+        self.send_packet(msg)
 
     @staticmethod
     def update_player(player: Player, update_from: dict) -> None:
@@ -82,4 +74,3 @@ class Connection(socket.socket):
                         direction=direction,
                         parent=player
                     )
-                    print(f"shot with weapon {weapon}")

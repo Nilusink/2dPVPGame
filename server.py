@@ -1,5 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
 from traceback import format_exc
-from threading import Thread
 import socket
 
 
@@ -7,6 +7,7 @@ class Server(socket.socket):
     running: bool = True
     default_timeout: float = .2
     __clients: list[socket.socket]
+    __Pool: ThreadPoolExecutor
 
     def __init__(self, port: int) -> None:
         super().__init__(socket.AF_INET, socket.SOCK_STREAM)
@@ -16,6 +17,7 @@ class Server(socket.socket):
 
         # later used variables
         self.__clients = []
+        self.__Pool = ThreadPoolExecutor(max_workers=100)
 
     @property
     def clients(self) -> list[socket.socket]:
@@ -27,7 +29,7 @@ class Server(socket.socket):
             try:
                 cl, address = self.accept()
                 print(f"New user: {address}")
-                Thread(target=self.handle_client, args=[cl]).start()
+                self.__Pool.submit(self.handle_client, cl)
 
             except TimeoutError:
                 continue
@@ -55,6 +57,9 @@ class Server(socket.socket):
 
             except (Exception,):
                 print(f"Error in thread(handle_client, {client}): {format_exc()}")
+                client.close()
+                self.__clients.remove(client)
+                return
 
     def send_all(self, message: bytes, exclude: list[socket.socket] = []) -> None:
         for client in self.clients:
