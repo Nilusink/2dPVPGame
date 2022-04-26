@@ -1,0 +1,8 @@
+{
+    "hivename": "user",
+    "writprotect": false,
+    "keys": {
+        "mykey": 1245,
+        "two": "value"
+    }
+}
