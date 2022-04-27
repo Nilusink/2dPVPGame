@@ -210,7 +210,7 @@ class Rocket(Bullet):
         )
 
         for sprite in CollisionDestroyed.box_collide(hit_box):
-            if sprite is not self and type(sprite) is not type(self):
+            if sprite is not self and not issubclass(type(sprite), Rocket):
                 sprite.hit(self.damage)
 
         self.kill()
