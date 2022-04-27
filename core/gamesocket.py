@@ -36,6 +36,7 @@ class GameSocket(socket.socket):
                         # store rest of bytes for next call
                         self.input_buffer = current_buffer[index:]
                         # parse msg_body as json and return
+                        print(f"{msg_body=}")
                         return json.loads(msg_body)
 
                     case _:  # content
