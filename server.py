@@ -1,12 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
+from core.gamesocket import GameSocket
 from traceback import format_exc
 import socket
 
 
-class Server(socket.socket):
+class Server(GameSocket):
     running: bool = True
     default_timeout: float = .2
-    __clients: list[socket.socket]
+    __clients: list[GameSocket]
     __Pool: ThreadPoolExecutor
 
     def __init__(self, port: int) -> None:
@@ -19,8 +20,10 @@ class Server(socket.socket):
         self.__clients = []
         self.__Pool = ThreadPoolExecutor(max_workers=100)
 
+        self.__msg_pool: list[tuple[dict, GameSocket]] = []
+
     @property
-    def clients(self) -> list[socket.socket]:
+    def clients(self) -> list[GameSocket]:
         return self.__clients
 
     def accept_clients(self) -> None:
@@ -29,6 +32,9 @@ class Server(socket.socket):
             try:
                 cl, address = self.accept()
                 print(f"New user: {address}")
+
+                setattr(cl, "input_buffer", b"")
+
                 self.__Pool.submit(self.handle_client, cl)
 
             except TimeoutError:
@@ -37,20 +43,15 @@ class Server(socket.socket):
             except (Exception,):
                 print(f"Error in thread (accept_clients): {format_exc()}")
 
-    def handle_client(self, client: socket.socket) -> None:
+    def handle_client(self, client: GameSocket) -> None:
         self.__clients.append(client)
 
         client.settimeout(self.default_timeout)
         while self.running:
             try:
-                msg = client.recv(2048)
-                if msg == b"":
-                    self.__clients.remove(client)
-                    client.close()
-                    print("disconnected after receiving nothing")
-                    return
+                msg = GameSocket.recv_packet(client)
 
-                self.send_all(msg, [client])
+                self.__msg_pool.append((msg, client))
 
             except TimeoutError:
                 continue
@@ -61,10 +62,12 @@ class Server(socket.socket):
                 self.__clients.remove(client)
                 return
 
-    def send_all(self, message: bytes, exclude: list[socket.socket] = []) -> None:
-        for client in self.clients:
-            if client not in exclude:
-                client.sendall(message)
+    def send_all(self) -> None:
+        while self.running:
+            for msg, cl in self.__msg_pool:
+                for client in self.clients:
+                    if client is not cl:
+                        GameSocket.send_packet(client, msg)
 
     def end(self) -> None:
         self.running = False

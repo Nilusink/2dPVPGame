@@ -44,3 +44,5 @@ class GameSocket(socket.socket):
                             msg_body += current_buffer[index:index+1].decode("ASCII")
             # read new bytes if end of message has not been reached
             msg: bytes = self.recv(1024)
+            if msg == b"":
+                raise ValueError
