@@ -6,6 +6,7 @@ class that handles receiving and sending packets
 """
 
 import socket
+import _socket
 import json
 
 
@@ -48,6 +49,14 @@ class GameSocket(socket.socket):
             msg: bytes = self.recv(1024)
             if msg == b"":
                 raise ValueError
+    
+    @classmethod
+    def from_socket(cls, sock: socket.socket):
+        fd = _socket.dup(sock.fileno())
+        copy = cls(sock.family, sock.type, sock.proto, fileno=fd)
+        copy.settimeout(sock.gettimeout())
+        sock.close()
+        return copy
 
 
 def send_packet(sock: socket.socket, packet: dict) -> None:
