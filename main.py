@@ -5,7 +5,7 @@ Nilusink
 
 from core.server_connecter import Connection
 from random import randint
-from core import *
+from core.game import *
 
 
 def main() -> None:

@@ -1,5 +1,5 @@
 from core.gamesocket import GameSocket
-from core import Player
+from core.game import Player
 
 
 class Connection(GameSocket):

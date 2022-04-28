@@ -1,6 +1,6 @@
 from core.gamesocket import GameSocket
 from threading import Thread
-from core import *
+from core.game import *
 import socket
 
 
