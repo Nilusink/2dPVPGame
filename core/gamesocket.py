@@ -18,7 +18,6 @@ class GameSocket(socket.socket):
 
     def send_packet(self, packet: dict) -> None:
         spacket = f"\x01{json.dumps(packet)}\x04"
-        print(f"len: {len(spacket.encode('ASCII'))}")
         self.send(spacket.encode("ASCII"))
 
     def recv_packet(self) -> dict:

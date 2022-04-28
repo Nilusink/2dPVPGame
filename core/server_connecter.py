@@ -4,6 +4,18 @@ from core import *
 import socket
 
 
+def print_traceback(func: tp.Callable) -> tp.Callable:
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+
+        except Exception:
+            print(f"\nexception in {func}\n")
+            raise
+
+    return wrapper
+
+
 class Connection(GameSocket):
     running: bool = True
     __server_address: tuple[str, int]
@@ -31,8 +43,11 @@ class Connection(GameSocket):
                     if player.name == data["name"]:
                         selected_player = player
                         break
+
                 if selected_player is ...:
+                    print(f"created new player")
                     selected_player = Player(spawn_point=Vec2(), name=data["name"])
+                    print(f"created new player, name: {selected_player.name}")
 
                 self.update_player(selected_player, data)
 
@@ -61,6 +76,7 @@ class Connection(GameSocket):
         self.send_packet(msg)
 
     @staticmethod
+    @print_traceback
     def update_player(player: Player, update_from: dict) -> None:
         player.position = Vec2.from_cartesian(update_from["pos"]["x"], update_from["pos"]["y"])
         player.velocity = Vec2.from_cartesian(update_from["vel"]["x"], update_from["vel"]["y"])

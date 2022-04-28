@@ -4,6 +4,18 @@ from traceback import format_exc
 import socket
 
 
+def print_traceback(func):
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+
+        except Exception:
+            print(f"\nexception in {func}\n")
+            raise
+
+    return wrapper
+
+
 class Server(GameSocket):
     running: bool = True
     default_timeout: float = .2
@@ -20,11 +32,20 @@ class Server(GameSocket):
         self.__clients = []
         self.__Pool = ThreadPoolExecutor(max_workers=100)
 
+        # start sending thread
         self.__msg_pool: list[tuple[dict, GameSocket]] = []
+
+        self.__Pool.submit(self.send_all)
 
     @property
     def clients(self) -> list[GameSocket]:
         return self.__clients
+
+    @property
+    def msg_pool(self) -> list[tuple[dict, GameSocket]]:
+        tmp = self.__msg_pool.copy()
+        self.__msg_pool.clear()
+        return tmp
 
     def accept_clients(self) -> None:
         self.settimeout(self.default_timeout)
@@ -32,6 +53,8 @@ class Server(GameSocket):
             try:
                 cl, address = self.accept()
                 cl = GameSocket.from_socket(cl)
+
+                cl.addr = address
                 print(f"New user: {address}")
 
                 self.__Pool.submit(self.handle_client, cl)
@@ -49,7 +72,6 @@ class Server(GameSocket):
         while self.running:
             try:
                 msg = client.recv_packet()
-
                 self.__msg_pool.append((msg, client))
 
             except TimeoutError:
@@ -61,12 +83,15 @@ class Server(GameSocket):
                 self.__clients.remove(client)
                 return
 
+    @print_traceback
     def send_all(self) -> None:
         while self.running:
-            for msg, cl in self.__msg_pool:
+            tmp = self.msg_pool
+
+            for msg, cl in tmp:
                 for client in self.clients:
-                    if client is not cl:
-                        cl.send_packet(msg)
+                    if client.addr != cl.addr:
+                        client.send_packet(msg)
 
     def end(self) -> None:
         self.running = False
