@@ -4,6 +4,7 @@ melektron
 """
 
 import json as j
+import shutil
 from typing import Any
 
 
@@ -16,7 +17,13 @@ class _Confhive:
         self.__hivefile = hivefile
 
         # load the config hive file
-        fd = open(hivefile, "r")
+        try:
+            fd = open(hivefile, "r")
+        except FileNotFoundError:
+            # create file from default file
+            shutil.copy(hivefile + ".default", hivefile)
+            fd = open(hivefile, "r")
+
         self.__hive: dict = j.load(fd)
         fd.close()
         # get the hive name and permissions

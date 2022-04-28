@@ -2,7 +2,6 @@
     "hivename": "user",
     "writeprotect": false,
     "keys": {
-        "mykey": 1245,
-        "two": "value"
+        "name":"username"
     }
 }
