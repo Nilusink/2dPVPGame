@@ -43,7 +43,7 @@ class GameSocket(socket.socket):
                             return json.loads(msg_body)
 
                         except json.decoder.JSONDecodeError:
-                            print(f"Error (json): {len(msg_body)}")
+                            print(f"Error (json): {msg_body} [{len(msg_body)}]")
 
                     case _:  # content
                         if store_bytes:    # only store bytes between start and end marker
