@@ -133,6 +133,6 @@ dmypy.json
 .idea/
 
 # config files should not be saved, only defaults
-.config/const.json
-.config/dyn.json
-.cinfig/user.json
+/config/const.json
+/config/dyn.json
+/config/user.json
