@@ -136,3 +136,6 @@ dmypy.json
 /config/const.json
 /config/dyn.json
 /config/user.json
+
+# don't save code workspaces
+*.code-workspace
