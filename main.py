@@ -14,7 +14,9 @@ def main() -> None:
     main_player = Player(spawn_point=Vec2.from_cartesian(
         x=100,
         y=910
-    ), controls=(
+    ),
+        controlled=True,
+        controls=(
         "d",
         "a",
         "SPACE",
@@ -24,19 +26,21 @@ def main() -> None:
         respawns=True,
         name=str(randint(1, 10000000))
     )
-    dummy = Player(
-        spawn_point=Vec2.from_cartesian(
-            x=1000,
-            y=50
-        ),
-        respawns=True
-    )
+    # dummy = Player(
+    #     spawn_point=Vec2.from_cartesian(
+    #         x=1000,
+    #         y=50
+    #     ),
+    #     respawns=True,
+    #     controlled=False,
+    # )
 
     Turret(
         position=Vec2.from_cartesian(
             x=1000,
             y=700
-        )
+        ),
+        weapon=Sniper
     )
 
     while True:

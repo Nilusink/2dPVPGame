@@ -10,8 +10,9 @@ import numpy as np
 import time
 
 from core.animations import play_animation
-from core.basegame import Game
-from core.groups import *
+import core.config as config
+from core.new_types import *
+from core.basegame import *
 
 # Events
 # Event types
@@ -192,15 +193,16 @@ class AK47(Bullet):
 class Rocket(Bullet):
     explosion_animation: str = "./images/animations/explosion/"
     character_path: str = "./images/weapons/rocket.png"
-    reload_time = config.const.ROCKET_RELOAD_TIME
-    mag_size = config.const.ROCKET_MAG_SIZE
-    cooldown = config.const.ROCKET_COOLDOWN
-    damage = config.const.ROCKET_DAMAGE
-    speed = config.const.ROCKET_SPEED
+    reload_time: float = config.const.ROCKET_RELOAD_TIME
+    mag_size: float = config.const.ROCKET_MAG_SIZE
+    cooldown: float = config.const.ROCKET_COOLDOWN
+    exp_damage: float = config.const.ROCKET_DAMAGE  # damage for explosions
+    speed: float = config.const.ROCKET_SPEED
+    damage: float = 10   # damage for direct hits
     _size = 64
     hp = 2
 
-    def hit(self, damage):
+    def hit(self, damage: float) -> None:
         self.hp -= damage
         if self.hp <= 0:
             self.on_death()
@@ -228,7 +230,7 @@ class Rocket(Bullet):
 
         for sprite in CollisionDestroyed.box_collide(hit_box):
             if sprite is not self and not issubclass(type(sprite), Rocket):
-                sprite.hit(self.damage)
+                sprite.hit(self.exp_damage)
 
         self.kill()
 
@@ -236,9 +238,9 @@ class Rocket(Bullet):
 class HomingRocket(Rocket):
     acceleration: float = 5
     speed = config.const.HOMING_ROCKET_SPEED
-    damage = config.const.HOMING_ROCKET_DAMAGE
     cooldown = config.const.HOMING_ROCKET_COOLDOWN
     mag_size = config.const.HOMING_ROCKET_MAG_SIZE
+    exp_damage = config.const.HOMING_ROCKET_DAMAGE
     reload_time = config.const.HOMING_ROCKET_RELOAD_TIME
     character_path: str = "./images/weapons/homingrocket.png"
     __grad_per_sec: float = 60
@@ -308,41 +310,114 @@ class Sniper(Bullet):
 
 class WeaponHandler:
     inaccuracy_resolution: int = 1000
-    __last_shot: float
-    __current_mag: dict[int]
-    __current_reload: dict[float]
+    __current_cooldown: dict[tp.Type[Bullet], float]
+    __current_reload: dict[tp.Type[Bullet], float]
+    __current_mag: dict[tp.Type[Bullet], int]
+    __last_cooldown_update: float
     __weapon: tp.Type[Bullet]
-    __current_cooldown: dict[float]
     __parent: pg.sprite.Sprite
+    auto_reload: bool
 
-    def __init__(self, parent: pg.sprite.Sprite, weapon: tp.Type[Bullet]):
+    def __init__(self, parent: pg.sprite.Sprite, weapon: tp.Type[Bullet], auto_reload: bool = False):
         self.__parent = parent
         self.__weapon = weapon
 
-        self.__current_reload = 0
-        self.__current_cooldown = 0
-        self.__current_mag = weapon.mag_size
+        self.__current_reload = {weapon: 0}
+        self.__current_cooldown = {weapon: 0}
+        self.__current_mag = {weapon: weapon.mag_size}
 
-        self.__last_shot = time.time()
+        self.auto_reload = auto_reload
 
-    def shoot(self, direction: Vec2, inaccuracy: float) -> None:
+        self.__last_cooldown_update = time.time()
+
+    @property
+    def weapon(self) -> tp.Type[Bullet]:
+        return self.__weapon
+
+    @property
+    def current_reload(self) -> float:
+        self.update_cooldown()
+        return self.__current_reload[self.weapon]
+
+    @property
+    def current_cooldown(self) -> float:
+        self.update_cooldown()
+        return self.__current_cooldown[self.weapon]
+
+    @property
+    def current_mag(self) -> float:
+        return self.__current_mag[self.weapon]
+
+    def get_mag_state(self, max_out: float) -> tuple[float, float]:
+        """
+        returns the current mag size (rising when reloading
+        :returns: x out of max_out, value of current state
+        """
+        if not self.current_reload:
+            return self.current_mag * (max_out / self.weapon.mag_size), self.current_mag
+
+        return (
+            ((self.weapon.reload_time-self.current_reload) / self.weapon.reload_time) * max_out,
+            round(self.current_reload, 2)
+        )
+
+    def update_cooldown(self) -> None:
+        now = time.time()
+        time_d = now - self.__last_cooldown_update
+        self.__current_cooldown[self.weapon] -= time_d
+        self.__current_reload[self.weapon] -= time_d
+
+        self.__current_reload[self.weapon] = 0 if \
+            self.__current_reload[self.weapon] <= 0 else \
+            self.__current_reload[self.weapon]
+
+        self.__current_cooldown[self.weapon] = 0 if \
+            self.__current_cooldown[self.weapon] <= 0 else \
+            self.__current_cooldown[self.weapon]
+
+        self.__last_cooldown_update = now
+
+    def change_weapon(self, weapon: tp.Type[Bullet]):
+        self.__weapon = weapon
+        if weapon not in self.__current_reload:
+            self.__current_reload[weapon] = 0
+            self.__current_cooldown[weapon] = 0
+            self.__current_mag[weapon] = weapon.mag_size
+
+    def reload(self) -> None:
+        if self.current_mag < self.weapon.mag_size:
+            self.__current_reload[self.weapon] = self.weapon.reload_time
+            self.__current_mag[self.weapon] = self.weapon.mag_size
+
+    def shoot(self, direction: Vec2, inaccuracy: float) -> tuple[bool, Bullet | None, Vec2 | None]:
         """
         :param direction: the direction to shoot at
         :param inaccuracy: in rad, 0 to switch off
         """
-        time_d = time.time() - self.__last_shot
-        self.__current_cooldown -= time_d
-        self.__current_reload -= time_d
-
-        if self.__current_reload <= 0 and self.__current_cooldown <= 0:
+        self.update_cooldown()
+        if self.current_reload == 0 and self.current_cooldown == 0 and self.current_mag > 0:
+            # calculate shooting angle (with inaccuracy)
             offset = (randint(-self.inaccuracy_resolution, self.inaccuracy_resolution) / self.inaccuracy_resolution)
             offset *= inaccuracy
-            direction.angle += inaccuracy
+            direction.angle += offset
             direction.length = 100
 
+            # calculate position
             pos = direction
             pos += self.__parent.position_center
-            self.__weapon(pos, direction, self.__parent, self.__parent.velocity)
+
+            # create bullet instance
+            b = self.__weapon(pos, direction, self.__parent, self.__parent.velocity)
+
+            # add cooldown and mag reduce
+            self.__current_cooldown[self.weapon] += self.weapon.cooldown
+            self.__current_mag[self.weapon] -= 1
+
+            if not self.current_mag and self.auto_reload:
+                self.reload()
+
+            return True, b, pos
+        return False, None, None
 
 
 # Player kinds
@@ -365,7 +440,7 @@ class Player(pg.sprite.Sprite):
 
     # private
     __weapon_indicator: "WeaponIndicator"
-    __max_hp: float = config.const.MAX_HP
+    _max_hp: float = config.const.MAX_HP
     __on_ground_override: bool = False
     __available_weapons: list
     __weapon: WeaponHandler
@@ -375,7 +450,7 @@ class Player(pg.sprite.Sprite):
     __facing: str = "right"
     __groups: list | tuple
     __events: list[dict]
-    __max_hp: float
+    __controlled: bool
     __spawn: Vec2
     __size: int = 32
 
@@ -383,6 +458,7 @@ class Player(pg.sprite.Sprite):
                  spawn_point: Vec2,
                  *groups_,
                  velocity: Vec2 = ...,
+                 controlled: bool = False,
                  controls: tuple[str, str, str, str] = ("", "", "", ""),
                  shoots: bool = False,
                  respawns: bool = False,
@@ -411,8 +487,9 @@ class Player(pg.sprite.Sprite):
         self.mouse_center = Vec2.from_cartesian(*config.const.WINDOW_SIZE) / 2
 
         # player meta
-        self.__spawn = spawn_point
         self.position = Vec2.from_cartesian(spawn_point.x, spawn_point.y)
+        self.__controlled = controlled
+        self.__spawn = spawn_point
         self.velocity = velocity
         self.controls = controls
         self.respawns = respawns
@@ -420,7 +497,7 @@ class Player(pg.sprite.Sprite):
         self.name = name
 
         # player config
-        self.hp = self.__max_hp
+        self.hp = self._max_hp
 
         self.bullet_offset: Vec2 = Vec2.from_cartesian(
             x=0,
@@ -447,6 +524,10 @@ class Player(pg.sprite.Sprite):
             self.__weapon_indicator = WeaponIndicator(Vec2.from_cartesian(0, 0), self.weapon)
 
     @property
+    def weapon_offset(self) -> Vec2:
+        return Vec2.from_cartesian(x=self.size / 2, y=self.size / 2)
+
+    @property
     def position_center(self) -> Vec2:
         return self.position + Vec2.from_cartesian(0, -self.size / 2)
 
@@ -462,9 +543,13 @@ class Player(pg.sprite.Sprite):
 
     @weapon.setter
     def weapon(self, weapon: tp.Type[Bullet]) -> None:
-        if self.shoots:
-            self.__weapon = weapon
+        self.__weapon.change_weapon(weapon)
+        if self.__weapon_indicator is not ...:
             self.__weapon_indicator.weapon = weapon
+
+    @property
+    def weapon_handler(self) -> WeaponHandler:
+        return self.__weapon
 
     @property
     def available_weapons(self) -> tuple[tp.Type[Bullet]]:
@@ -520,7 +605,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def max_hp(self) -> float:
-        return self.__max_hp
+        return self._max_hp
 
     @property
     def cooldown(self) -> float:
@@ -530,6 +615,22 @@ class Player(pg.sprite.Sprite):
     def cooldown(self, value: float) -> None:
         self.__cooldown[self.weapon_index] = value
 
+    def set_max_hp(self, hp: float) -> None:
+        self._max_hp = hp
+
+    def get_nearest_player(self) -> tp.Union["Player", None]:
+        closest_distance: float = np.inf
+        closest_player: Player | None = None
+        for player in Players.sprites():
+            player: Player
+            if player != self:
+                dist = abs((self.position - player.position).length)
+                if dist < closest_distance:
+                    closest_player = player
+                    closest_distance = dist
+
+        return closest_player
+
     def update_rect(self) -> None:
         self.rect = pg.Rect(self.position.x - self.size / 2, self.position.y - self.size, self.size, self.size)
 
@@ -537,23 +638,27 @@ class Player(pg.sprite.Sprite):
         for i, cooldown in enumerate(self.__cooldown):
             self.__cooldown[i] = cooldown - delta / config.const.T_MULT if cooldown > 0 else 0
 
-        if Game.is_pressed(self.controls[0]):
-            self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
+        if self.__controlled:
+            if Game.is_pressed(self.controls[0]):
+                self.velocity.x = self.max_speed  # if self.velocity.x < self.max_speed else self.max_speed
 
-        if Game.is_pressed(self.controls[1]):
-            self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
+            if Game.is_pressed(self.controls[1]):
+                self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
 
-        if Game.is_pressed(self.controls[3]):
-            self.__on_ground_override = True
+            if Game.is_pressed(self.controls[3]):
+                self.__on_ground_override = True
 
-        else:
-            self.__on_ground_override = False
+            else:
+                self.__on_ground_override = False
 
-        if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
-            self.velocity.x = 0
+            if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
+                self.velocity.x = 0
 
-        if Game.is_pressed(self.controls[2]) and self.on_ground:
-            self.velocity.y -= self.jump_speed
+            if Game.is_pressed(self.controls[2]) and self.on_ground:
+                self.velocity.y -= self.jump_speed
+
+            if Game.is_pressed("r"):
+                self.__weapon.reload()
 
         # update aiming pointer
         if self.shoots:
@@ -601,27 +706,19 @@ class Player(pg.sprite.Sprite):
         """
         # bullet spawner
         if self.shoots:
-            pos = self.position_center
-            pos += direction
-            b = self.weapon(
-                position=pos,
-                direction=direction,
-                parent=self,
-                initial_velocity=self.velocity
-            )
-            self.__bullets.append(b)
-            self.cooldown += b.cooldown
+            cond, bullet, pos = self.__weapon.shoot(direction, inaccuracy=0)
 
-            self.__events.append({
-                "type": SHOT,
-                "weapon": self.weapon.__name__,
-                "angle": direction.angle,
-                "pos": {
-                    "x": pos.x,
-                    "y": pos.y,
-                },
-                "id": b.id
-            })
+            if cond:
+                self.__events.append({
+                    "type": SHOT,
+                    "weapon": self.weapon.__name__,
+                    "angle": direction.angle,
+                    "pos": {
+                        "x": pos.x,
+                        "y": pos.y,
+                    },
+                    "id": bullet.id
+                })
 
     def hit(self, damage: float) -> None:
         self.hp -= damage
@@ -648,62 +745,31 @@ class Player(pg.sprite.Sprite):
         self.add(*self.__groups)
 
 
-class Turret(pg.sprite.Sprite):
-    cooldown: float = 0
-    accuracy: float = 10  # -1 to 1 / accuracy | in rad
-    __character_path: str = "./images/characters/amogus/amogus48left.png"
-    __position: Vec2
-    __weapon: tp.Type[Bullet]
+class Turret(Player):
+    activation_distance: float = 700
+    inaccuracy: float = 0.05
+    __max_hp: float = 100
 
-    def __init__(self, position: Vec2) -> None:
-        super().__init__()
-        self.__position = position
-        self.__weapon = AK47
+    def __init__(self, position: Vec2, weapon: tp.Type[Bullet]) -> None:
+        super().__init__(position, controlled=False, shoots=False, respawns=False)
+        self.remove(GravityAffected, FrictionXAffected)
+        self.weapon_handler.auto_reload = True
+        self.weapon = weapon
 
-        self.image = pg.image.load(self.__character_path)
-        self.rect = pg.Rect(self.__position.x, self.__position.y, 48, 48)
-
-        self.add(Updated)
-
-    def get_nearest_player(self) -> Player | None:
-        closest_distance: float = np.inf
-        closest_player: Player | None = None
-        for player in Players.sprites():
-            player: Player
-            dist = abs((self.__position - player.position).length)
-            if dist < closest_distance:
-                closest_player = player
-                closest_distance = dist
-
-        return closest_player
+        # update hp
+        self.set_max_hp(self.__max_hp)
+        self.hp = self.__max_hp
 
     def update(self, delta: float) -> None:
         self.cooldown = self.cooldown - delta / config.const.T_MULT if self.cooldown > 0 else 0
 
         target = self.get_nearest_player()
         if target:
-            delta = target.position - self.__position
-            if delta.length < 1000:
-                self.shoot(delta)
-
-    def shoot(self, direction: Vec2) -> None:
-        """
-        shoot a bulletin the direction of the vector
-        """
-        # bullet spawner
-        if not self.cooldown:
-            rand_mod = (randint(0, 2000) - 100) / (1000 * self.accuracy)
-            direction.angle += rand_mod
-            pos = self.__position + Vec2.from_cartesian(x=0, y=-100)
-            b = self.__weapon(
-                position=pos,
-                direction=direction,
-                parent=self,
-            )
-            self.cooldown += b.cooldown / 4
+            delta = target.position_center - self.position_center
+            if delta.length < self.activation_distance:
+                self.weapon_handler.shoot(delta, self.inaccuracy)
 
 
-# GUI stuff
 class Scope(pg.sprite.Sprite):
     character_path: str = "./images/weapons/scope.png"
     image: pg.Surface
@@ -737,15 +803,15 @@ class WeaponIndicator(pg.sprite.Sprite):
     rect: pg.Rect
     __weapon: tp.Type[Bullet]
 
-    def __init__(self, position: Vec2, weapon: tp.Type[Bullet]) -> None:
+    def __init__(self, sign_position: Vec2, weapon: tp.Type[Bullet]) -> None:
         super().__init__()
 
-        self.position = position
         self.__weapon = weapon
+        self.position = sign_position
         self.scale: tuple[int, int] = (80, 40)
 
-        img = pg.image.load(self.character_path.replace("WEAPON", self.__weapon.__name__.lower()))
-        self.image = pg.transform.scale(img, self.scale)
+        self.__orig_img = pg.image.load(self.character_path.replace("WEAPON", self.__weapon.__name__.lower()))
+        self.image = pg.transform.scale(self.__orig_img, self.scale)
 
         self.rect = pg.Rect(self.position.x, self.position.y, *self.scale)
 

@@ -2,10 +2,15 @@
 Author:
 melektron
 """
-
-import yaml as j
-import shutil
 from typing import Any
+import shutil
+
+# yaml imports
+import yaml
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
 
 
 class ConfigPermissionError(Exception):
@@ -24,7 +29,7 @@ class _Confhive:
             shutil.copy(hivefile + ".default", hivefile)
             fd = open(hivefile, "r")
 
-        self.__hive: dict = j.load(fd)
+        self.__hive: dict = yaml.load(fd, Loader=Loader)
         fd.close()
         # get the hive name and permissions
         self.__hivename: str = self.__hive["hivename"]
@@ -41,7 +46,7 @@ class _Confhive:
         
         self.__hive["keys"][config_key] = value
         fd = open(self.__hivefile, "w")
-        j.dump(self.__hive, fd)
+        yaml.dump(self.__hive, fd, Dumper=Dumper)
         fd.close()
     
 
