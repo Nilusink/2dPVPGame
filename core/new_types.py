@@ -42,6 +42,16 @@ class Vec2:
         self.__update("c")
 
     @property
+    def xy(self):
+        return self.__x, self.__y
+
+    @xy.setter
+    def xy(self, xy):
+        self.__x = xy[0]
+        self.__y = xy[1]
+        self.__update("c")
+
+    @property
     def angle(self):
         """
         value in radian
@@ -69,6 +79,16 @@ class Vec2:
     @length.setter
     def length(self, value):
         self.__length = value
+        self.__update("p")
+
+    @property
+    def polar(self):
+        return self.__angle, self.__length
+
+    @polar.setter
+    def polar(self, polar):
+        self.__angle = polar[0]
+        self.__length = polar[1]
         self.__update("p")
 
     # interaction
@@ -147,20 +167,14 @@ class Vec2:
     @staticmethod
     def from_cartesian(x, y) -> "Vec2":
         p = Vec2()
-        p.x = x
-        p.y = y
+        p.xy = x, y
 
         return p
 
     @staticmethod
     def from_polar(angle, length) -> "Vec2":
         p = Vec2()
-        while angle > 2*PI:
-            angle -= 2*PI
-        while angle < 0:
-            angle += 2*PI
-        p.angle = angle
-        p.length = length
+        p.polar = angle, length
 
         return p
 

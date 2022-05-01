@@ -1,7 +1,7 @@
 from core.gamesocket import GameSocket
 from threading import Thread
 from core.game import *
-import socket
+import socket, json
 
 
 def print_traceback(func: tp.Callable) -> tp.Callable:
@@ -72,6 +72,8 @@ class Connection(GameSocket):
         for bullet in UpdatesToNetwork:
             events = [event.to_dict() for event in bullet.events]
             msg["events"] += events
+
+        print(f"sending {len(json.dumps(msg))}")
 
         self.send_packet(msg)
 

@@ -141,15 +141,18 @@ class _HasBars(pg.sprite.Group):
                 max_len = sprite.size
                 now_len = (sprite.hp / sprite.max_hp) * max_len
 
+                bar_start = sprite.position.copy()
+                bar_start.x -= sprite.size / 2
+
                 pg.draw.rect(
                     surface,
                     (0, 0, 0, 128),
-                    pg.Rect(sprite.position.x, sprite.position.y, max_len, bar_height)
+                    pg.Rect(*bar_start.xy, max_len, bar_height)
                 )
                 pg.draw.rect(
                     surface,
                     (0, 255, 0, 255),
-                    pg.Rect(sprite.position.x, sprite.position.y, now_len, bar_height)
+                    pg.Rect(*bar_start.xy, now_len, bar_height)
                 )
 
                 # draw reload bar
@@ -157,12 +160,12 @@ class _HasBars(pg.sprite.Group):
                 pg.draw.rect(
                     surface,
                     (0, 0, 0, 128),
-                    pg.Rect(sprite.position.x, sprite.position.y + 1.5 * bar_height, max_len if now_len else 0, bar_height)
+                    pg.Rect(bar_start.x, bar_start.y + 1.5 * bar_height, max_len if now_len else 0, bar_height)
                 )
                 pg.draw.rect(
                     surface,
                     (155, 155, 255, 255),
-                    pg.Rect(sprite.position.x, sprite.position.y + 1.5 * bar_height, now_len, bar_height)
+                    pg.Rect(bar_start.x, bar_start.y + 1.5 * bar_height, now_len, bar_height)
                 )
 
 

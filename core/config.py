@@ -3,7 +3,7 @@ Author:
 melektron
 """
 
-import json as j
+import yaml as j
 import shutil
 from typing import Any
 
@@ -45,6 +45,6 @@ class _Confhive:
         fd.close()
     
 
-user = _Confhive("config/user.json")
-const = _Confhive("config/const.json")
-dyn = _Confhive("config/dyn.json")
+user = _Confhive("config/user.yaml")
+const = _Confhive("config/const.yaml")
+dyn = _Confhive("config/dyn.yaml")

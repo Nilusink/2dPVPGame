@@ -2,14 +2,15 @@
 Author:
 Nilusink
 """
+import configparser
 from dataclasses import dataclass
 from threading import Timer
 from random import randint
 import numpy as np
+import time
 
 from core.animations import play_animation
 from core.basegame import Game
-import core.config as config
 from core.groups import *
 
 # Events
@@ -71,14 +72,16 @@ class PlayerUpdate(Event):
 
 # Weapons
 class Bullet(pg.sprite.Sprite):
-    cooldown: float = 0
-    speed: float = 0
+    reload_time: float
+    cooldown: float
+    mag_size: int
+    damage: float
+    speed: float
     _size: int = 0
     parent: pg.sprite.Sprite
     character_path: str
     last_angle: float
     velocity: Vec2
-    damage: float
     rect: pg.Rect
     _original_image: pg.Surface
     _position: Vec2
@@ -101,9 +104,16 @@ class Bullet(pg.sprite.Sprite):
         img = pg.image.load(self.character_path)
         img = pg.transform.scale(img, (self._size, self._size))
         self._original_image = img
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
-        self.rect = pg.Rect(self._position.x, self._position.y, self._size, self._size)
 
+        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
+        self.last_angle = self.velocity.angle
+
+        self.rect = pg.Rect(
+            self._position.x - self._size / 2,
+            self._position.y - self._size / 2,
+            self._size,
+            self._size
+        )
         self.id = randint(0, 1_000_000_000)
 
         self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
@@ -139,6 +149,9 @@ class Bullet(pg.sprite.Sprite):
         return closest_player
 
     def update(self, delta: float) -> None:
+        self._update(delta)
+
+    def _update(self, delta: float) -> None:
         self._position += self.velocity * delta
 
         if self.out_of_bounds or self.on_ground:
@@ -168,6 +181,8 @@ class Bullet(pg.sprite.Sprite):
 
 class AK47(Bullet):
     character_path: str = "./images/weapons/bullet.png"
+    reload_time = config.const.BULLET_RELOAD_TIME
+    mag_size = config.const.BULLET_MAG_SIZE
     cooldown = config.const.BULLET_COOLDOWN
     damage = config.const.BULLET_DAMAGE
     speed = config.const.BULLET_SPEED
@@ -177,6 +192,8 @@ class AK47(Bullet):
 class Rocket(Bullet):
     explosion_animation: str = "./images/animations/explosion/"
     character_path: str = "./images/weapons/rocket.png"
+    reload_time = config.const.ROCKET_RELOAD_TIME
+    mag_size = config.const.ROCKET_MAG_SIZE
     cooldown = config.const.ROCKET_COOLDOWN
     damage = config.const.ROCKET_DAMAGE
     speed = config.const.ROCKET_SPEED
@@ -221,8 +238,10 @@ class HomingRocket(Rocket):
     speed = config.const.HOMING_ROCKET_SPEED
     damage = config.const.HOMING_ROCKET_DAMAGE
     cooldown = config.const.HOMING_ROCKET_COOLDOWN
+    mag_size = config.const.HOMING_ROCKET_MAG_SIZE
+    reload_time = config.const.HOMING_ROCKET_RELOAD_TIME
     character_path: str = "./images/weapons/homingrocket.png"
-    __grad_per_sec: float = 50
+    __grad_per_sec: float = 60
     __rad_per_sec: float
     __events: list[Event]
 
@@ -249,45 +268,81 @@ class HomingRocket(Rocket):
             position_delta = target.position_center - self.position
             angle_delta = self.velocity.angle - position_delta.angle
 
-            to_change = (-angle_delta / abs(angle_delta)) * self.__rad_per_sec * (delta / config.const.T_MULT)
+            while angle_delta > 2*config.const.PI:
+                angle_delta -= 2*config.const.PI
+
+            end = self.position + Vec2.from_polar(angle=angle_delta+self.velocity.angle, length=50)
+            pg.draw.line(Game.top_layer, (255, 0, 0, 255), self.position.xy, end.xy)
+
+            end = self.position + Vec2.from_polar(angle=angle_delta, length=50)
+            pg.draw.line(Game.top_layer, (0, 0, 255, 255), self.position.xy, end.xy)
+
+            sign = 1
+            if angle_delta > 0.001:
+                sign = -angle_delta / abs(angle_delta)
+
+            to_change = sign * self.__rad_per_sec * (delta / config.const.T_MULT)
 
             if angle_delta > config.const.PI:
                 to_change *= -1
+
+            end = self.position + Vec2.from_polar(angle=to_change, length=700)
+            pg.draw.line(Game.top_layer, (0, 255, 0, 255), self.position.xy, end.xy)
 
             self.velocity.angle += to_change
 
         self.velocity.length += self.acceleration * delta
 
-        self._position += self.velocity * delta
-
-        if self.out_of_bounds or self.on_ground:
-            self.on_death()
-
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
-        self.last_angle = self.velocity.angle
-
-        self.rect = pg.Rect(
-            self.position.x - self._size / 2,
-            self.position.y - self._size / 2,
-            self._size,
-            self._size
-        )
-
-        self.__events.append(BulletUpdate(
-            type=BULLET_UPDATE,
-            position=self.position,
-            velocity=self.velocity,
-            damage=self.damage,
-            id=self.id
-        ))
+        self._update(delta)
 
 
 class Sniper(Bullet):
     character_path: str = "./images/weapons/bullet.png"
+    reload_time = config.const.SNIPER_RELOAD_TIME
+    mag_size = config.const.SNIPER_MAG_SIZE
     cooldown = config.const.SNIPER_COOLDOWN
     damage = config.const.SNIPER_DAMAGE
     speed = config.const.SNIPER_SPEED
     _size = 32
+
+
+class WeaponHandler:
+    inaccuracy_resolution: int = 1000
+    __last_shot: float
+    __current_mag: dict[int]
+    __current_reload: dict[float]
+    __weapon: tp.Type[Bullet]
+    __current_cooldown: dict[float]
+    __parent: pg.sprite.Sprite
+
+    def __init__(self, parent: pg.sprite.Sprite, weapon: tp.Type[Bullet]):
+        self.__parent = parent
+        self.__weapon = weapon
+
+        self.__current_reload = 0
+        self.__current_cooldown = 0
+        self.__current_mag = weapon.mag_size
+
+        self.__last_shot = time.time()
+
+    def shoot(self, direction: Vec2, inaccuracy: float) -> None:
+        """
+        :param direction: the direction to shoot at
+        :param inaccuracy: in rad, 0 to switch off
+        """
+        time_d = time.time() - self.__last_shot
+        self.__current_cooldown -= time_d
+        self.__current_reload -= time_d
+
+        if self.__current_reload <= 0 and self.__current_cooldown <= 0:
+            offset = (randint(-self.inaccuracy_resolution, self.inaccuracy_resolution) / self.inaccuracy_resolution)
+            offset *= inaccuracy
+            direction.angle += inaccuracy
+            direction.length = 100
+
+            pos = direction
+            pos += self.__parent.position_center
+            self.__weapon(pos, direction, self.__parent, self.__parent.velocity)
 
 
 # Player kinds
@@ -300,24 +355,26 @@ class Player(pg.sprite.Sprite):
     position: Vec2
     respawns: bool
     image: pg.Surface
+    mouse_center: Vec2
     bullet_offset: Vec2
     parent: pg.sprite.Sprite
+    controls: tuple[str, str, str, str]
     max_speed: float = config.const.MAX_SPEED
     jump_speed: float = config.const.JUMP_SPEED
-    controls: tuple[str, str, str]
     character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
 
     # private
     __weapon_indicator: "WeaponIndicator"
-    __bullets: list[Bullet] = []
-    __available_weapons: list
-    __weapon: tp.Type[Bullet]
-    __events: list[dict] = []
     __max_hp: float = config.const.MAX_HP
+    __on_ground_override: bool = False
+    __available_weapons: list
+    __weapon: WeaponHandler
     __weapon_index: int = 0
+    __bullets: list[Bullet]
     __cooldown: list[float]
     __facing: str = "right"
     __groups: list | tuple
+    __events: list[dict]
     __max_hp: float
     __spawn: Vec2
     __size: int = 32
@@ -326,7 +383,7 @@ class Player(pg.sprite.Sprite):
                  spawn_point: Vec2,
                  *groups_,
                  velocity: Vec2 = ...,
-                 controls: tuple[str, str, str] = ("", "", ""),
+                 controls: tuple[str, str, str, str] = ("", "", "", ""),
                  shoots: bool = False,
                  respawns: bool = False,
                  name: str = ""
@@ -334,6 +391,10 @@ class Player(pg.sprite.Sprite):
 
         if velocity is ...:
             velocity = Vec2()
+
+        # init mutable defaults
+        self.__events = []
+        self.__bullets = []
 
         super().__init__(*groups_)
         # weapon config
@@ -344,7 +405,10 @@ class Player(pg.sprite.Sprite):
             Rocket,
             HomingRocket
         )
-        self.__weapon: tp.Type[Bullet] = self.__available_weapons[self.__weapon_index]
+        w = self.__available_weapons[self.__weapon_index]
+        self.__weapon = WeaponHandler(self, w)
+
+        self.mouse_center = Vec2.from_cartesian(*config.const.WINDOW_SIZE) / 2
 
         # player meta
         self.__spawn = spawn_point
@@ -359,7 +423,7 @@ class Player(pg.sprite.Sprite):
         self.hp = self.__max_hp
 
         self.bullet_offset: Vec2 = Vec2.from_cartesian(
-            x=self.size,
+            x=0,
             y=-self.size
         )
 
@@ -384,7 +448,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def position_center(self) -> Vec2:
-        return self.position + Vec2.from_cartesian(self.size/2, -self.size)
+        return self.position + Vec2.from_cartesian(0, -self.size / 2)
 
     @property
     def events(self) -> list[dict]:
@@ -394,7 +458,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def weapon(self) -> tp.Type[Bullet]:
-        return self.__weapon
+        return self.__weapon.weapon
 
     @weapon.setter
     def weapon(self, weapon: tp.Type[Bullet]) -> None:
@@ -452,7 +516,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def on_ground(self) -> bool:
-        return Game.on_floor(self.position) and self.velocity.y >= 0
+        return Game.on_floor(self.position) and self.velocity.y >= 0 and not self.__on_ground_override
 
     @property
     def max_hp(self) -> float:
@@ -467,7 +531,7 @@ class Player(pg.sprite.Sprite):
         self.__cooldown[self.weapon_index] = value
 
     def update_rect(self) -> None:
-        self.rect = pg.Rect(self.position.x, self.position.y - self.size, self.size, self.size)
+        self.rect = pg.Rect(self.position.x - self.size / 2, self.position.y - self.size, self.size, self.size)
 
     def update(self, delta: float) -> None:
         for i, cooldown in enumerate(self.__cooldown):
@@ -479,25 +543,43 @@ class Player(pg.sprite.Sprite):
         if Game.is_pressed(self.controls[1]):
             self.velocity.x = -self.max_speed  # if -self.velocity.x > -self.max_speed else -self.max_speed
 
+        if Game.is_pressed(self.controls[3]):
+            self.__on_ground_override = True
+
+        else:
+            self.__on_ground_override = False
+
         if not Game.is_pressed(self.controls[0]) and not Game.is_pressed(self.controls[1]):
             self.velocity.x = 0
 
         if Game.is_pressed(self.controls[2]) and self.on_ground:
             self.velocity.y -= self.jump_speed
 
-        if pg.mouse.get_pressed()[0]:
-            if not self.cooldown:
-                mouse_pos = pg.mouse.get_pos()
-                mouse_pos = Vec2.from_cartesian(*mouse_pos)
+        # update aiming pointer
+        if self.shoots:
+            mouse_pos = pg.mouse.get_pos()
+            mouse_pos = Vec2.from_cartesian(*mouse_pos)
 
-                direction = mouse_pos - self.position
-                self.shoot(direction)
+            direction = mouse_pos - self.mouse_center
+            direction.length = 60
+            to = self.position_center + direction
+            direction.length = 20
+            start = self.position_center + direction
+            pg.draw.line(Game.top_layer, (255, 0, 0, 255), start.xy, to.xy)
+
+            if pg.mouse.get_pressed()[0]:
+                if not self.cooldown:
+                    self.shoot(direction)
 
         if Game.is_pressed("scroll_down"):
             self.weapon_index -= 1
 
         if Game.is_pressed("scroll_up"):
             self.weapon_index += 1
+
+        # check if out of map
+        if self.position.y > config.const.WINDOW_SIZE[1] + 200:
+            self.on_death()
 
         # face the direction you're heading
         if self.velocity.x:
@@ -519,7 +601,8 @@ class Player(pg.sprite.Sprite):
         """
         # bullet spawner
         if self.shoots:
-            pos = self.position + self.bullet_offset
+            pos = self.position_center
+            pos += direction
             b = self.weapon(
                 position=pos,
                 direction=direction,
@@ -567,6 +650,7 @@ class Player(pg.sprite.Sprite):
 
 class Turret(pg.sprite.Sprite):
     cooldown: float = 0
+    accuracy: float = 10  # -1 to 1 / accuracy | in rad
     __character_path: str = "./images/characters/amogus/amogus48left.png"
     __position: Vec2
     __weapon: tp.Type[Bullet]
@@ -574,7 +658,7 @@ class Turret(pg.sprite.Sprite):
     def __init__(self, position: Vec2) -> None:
         super().__init__()
         self.__position = position
-        self.__weapon = HomingRocket
+        self.__weapon = AK47
 
         self.image = pg.image.load(self.__character_path)
         self.rect = pg.Rect(self.__position.x, self.__position.y, 48, 48)
@@ -608,6 +692,8 @@ class Turret(pg.sprite.Sprite):
         """
         # bullet spawner
         if not self.cooldown:
+            rand_mod = (randint(0, 2000) - 100) / (1000 * self.accuracy)
+            direction.angle += rand_mod
             pos = self.__position + Vec2.from_cartesian(x=0, y=-100)
             b = self.__weapon(
                 position=pos,

@@ -27,23 +27,30 @@ class GameSocket(socket.socket):
         while True:
             # include unused bytes from last receive
             current_buffer = self.input_buffer + msg
+            print(f"{current_buffer=}")
             for index, byte in enumerate(current_buffer):
                 match byte:
                     case 0x01:  # start marker
+                        # print("start")
                         store_bytes = True
 
                     case 0x04:  # end marker
-                        if index == 0:
-                            continue
+                        if store_bytes:
+                            # print("end")
+                            #
+                            # if index == 0:
+                            #     continue
 
-                        # store rest of bytes for next call
-                        self.input_buffer = current_buffer[index:]
-                        # parse msg_body as json and return
-                        try:
-                            return json.loads(msg_body)
+                            # store rest of bytes for next call
+                            self.input_buffer = current_buffer[index+1:]
+                            # parse msg_body as json and return
+                            try:
+                                # print(f"received {len(msg_body)}")
+                                return json.loads(msg_body)
 
-                        except json.decoder.JSONDecodeError:
-                            print(f"Error (json): {msg_body} [{len(msg_body)}]")
+                            except json.decoder.JSONDecodeError:
+                                print(f"Error (json): {self.input_buffer} [{len(msg_body)}]")
+                            return {}
 
                     case _:  # content
                         if store_bytes:    # only store bytes between start and end marker

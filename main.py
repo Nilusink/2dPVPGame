@@ -4,46 +4,44 @@ Nilusink
 """
 
 from core.server_connecter import Connection
-from random import randint
 from core.game import *
 
 
 def main() -> None:
-    server = Connection(
-        (config.dyn.server_ip, 12345)
-    )
+    # server = Connection(
+    #     (config.dyn.server_ip, 12345)
+    # )
     main_player = Player(spawn_point=Vec2.from_cartesian(
         x=100,
         y=910
     ), controls=(
         "d",
         "a",
-        "SPACE"
+        "SPACE",
+        "s"
     ),
         shoots=True,
         respawns=True,
         name=str(randint(1, 10000000))
     )
-    # dummy = Player(
-    #     spawn_point=Vec2.from_cartesian(
-    #         x=1000,
-    #         y=50
-    #     ),
-    #     respawns=True
-    # )
+    dummy = Player(
+        spawn_point=Vec2.from_cartesian(
+            x=1000,
+            y=50
+        ),
+        respawns=True
+    )
 
-    _scope = Scope()
-
-    # Turret(
-    #     position=Vec2.from_cartesian(
-    #         x=1000,
-    #         y=900
-    #     )
-    # )
+    Turret(
+        position=Vec2.from_cartesian(
+            x=1000,
+            y=700
+        )
+    )
 
     while True:
         Game.update()
-        server.send_update(main_player)
+        # server.send_update(main_player)
         pg.display.update()
 
 
