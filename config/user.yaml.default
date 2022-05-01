@@ -1,0 +1,4 @@
+hivename: user
+keys:
+  name: username
+writeprotect: false
