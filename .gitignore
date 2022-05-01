@@ -136,6 +136,3 @@ dmypy.json
 /config/const.json
 /config/dyn.json
 /config/user.json
-
-json_yaml_converter.py
-config_bup/
