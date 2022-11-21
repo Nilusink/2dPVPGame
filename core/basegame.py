@@ -2,18 +2,40 @@
 Author:
 Nilusink
 """
+from concurrent.futures import ThreadPoolExecutor as Pool
+from traceback import format_exc
 from contextlib import suppress
 from core.new_types import Vec2
 import core.config as config
 import pygame as pg
 import typing as tp
+import numpy as np
 import string
 import json
 import time
 import os
 
 
+# Fixes errors (actually), keep False
+_ERROR_FIXER: bool = False
+
+
+def print_traceback(func: tp.Callable) -> tp.Callable:
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+
+        except Exception:
+            print(f"\nexception in {func}:\n {format_exc()}\n")
+            raise
+
+    return wrapper
+
+
 class _Game:
+    running: bool = True
+    world_bounds: Vec2 = Vec2.from_cartesian(np.inf, np.inf)
+
     def __init__(self, world_path: str, window_size: tuple[int, int] = ...):
         # initialize pygame
         pg.init()
@@ -24,13 +46,16 @@ class _Game:
             window_size = (screen_info.current_w, screen_info.current_h)
 
         # create window
+        self.times = []
+        self.times_values = []
+        self.times_Values2 = []
         self.screen = pg.display.set_mode(window_size, pg.SCALED)
         self.lowest_layer = pg.Surface(window_size, pg.SRCALPHA, 32)
         self.middle_layer = pg.Surface(window_size, pg.SRCALPHA, 32)
         self.top_layer = pg.Surface(window_size, pg.SRCALPHA, 32)
         self.font = pg.font.SysFont(None, 24)
-        pg.display.set_caption("GayGame")
-        pg.mouse.set_visible(False)
+        pg.display.set_caption("Gayme")
+        # pg.mouse.set_visible(False)
 
         # later used variables
         self.__registered_objects: list[pg.sprite.Sprite] = []
@@ -38,13 +63,22 @@ class _Game:
         self.__pressed_keys: dict[str, bool] = {}
         self.__last_pressed_keys: dict[str, bool] = {}
 
-        self.__last = time.time()
+        self.__last = time.perf_counter()
+        self.__last_calculate = time.perf_counter_ns()
 
         self.__platforms: list[dict] = []
         self.__world_config: dict = {}
         self.__to_blit: list[tuple[pg.Surface, pg.Surface, Vec2]] = []
+        self.__to_loop: list[tuple[tp.Callable, list, dict]] = []
 
         self.__text_to_rend: list[tuple[str, Vec2, pg.Surface, tuple[float, float, float, float]]] = []
+
+        # Threading
+        # pool init
+        self.__pool = Pool(max_workers=100)
+
+        # create own thread for calculating stuff
+        self.__pool.submit(self.calculate_stuff)
 
         self.load_world(world_path)
 
@@ -61,26 +95,34 @@ class _Game:
         if not os.path.exists(world_path):
             raise FileNotFoundError(f"No such file or directory: {world_path}")
 
-        config: dict = json.load(open(world_path, "r"))
-        self.__platforms = config["platforms"]
-        config.pop("platforms")
-        self.__world_config = config
+        conf: dict = json.load(open(world_path, "r"))
+        self.__platforms = conf["platforms"]
+        self.world_bounds = Vec2.from_cartesian(*conf["bounds"])
+        conf.pop("platforms")
+        conf.pop("bounds")
+        self.__world_config = conf
 
     def draw_world(self) -> None:
         self.lowest_layer.fill(self.__world_config["background"])
         for platform in self.__platforms:
-            pg.draw.rect(self.lowest_layer, platform["color"], pg.Rect(*platform["pos"], *platform["size"]))
+            x, y = platform["pos"]
+            x *= config.const.PIXELS_PER_METER
+            y *= config.const.PIXELS_PER_METER
+            width, height = platform["size"]
+            width *= config.const.PIXELS_PER_METER
+            height *= config.const.PIXELS_PER_METER
+            pg.draw.rect(self.lowest_layer, platform["color"], pg.Rect(x, y, width, height))
 
     def on_floor(self, point: Vec2):
         """
         takes a point and checks if it is on the floor
         """
         for platform in self.__platforms:
-            pos = platform["pos"]
-            size = platform["size"]
+            x, y = platform["pos"]
+            width, height = platform["size"]
             if all([
-                pos[0] < point.x < pos[0] + size[0],
-                pos[1] < point.y < pos[1] + size[1]
+                x < point.x < x + width,
+                y < point.y < y + height
             ]):
                 return True
         return False
@@ -90,6 +132,52 @@ class _Game:
 
     def was_last_pressed(self, key: str) -> bool:
         return key in self.__last_pressed_keys and self.__last_pressed_keys[key]
+
+    @print_traceback
+    def calculate_stuff(self, loop: bool = True) -> None:
+        while not _ERROR_FIXER:
+            pass
+
+        def johnathan():
+            now = time.perf_counter_ns()
+            delta = now - self.__last_calculate
+            self.__last_calculate = now
+
+            delta /= 1e9
+
+            # update Updated group
+            Updated.update(delta)
+
+            # calculate stuff
+            GravityAffected.calculate_gravity(delta)
+            FrictionAffected.calculate_friction(delta)
+            FrictionXAffected.calculate_friction(delta)
+            WallBouncer.update()
+
+            # check for collisions
+            CollisionDestroyed.update()
+
+            self.times.append([
+                now,
+                time.perf_counter_ns()-now,
+                len(Bullets.sprites())
+            ])
+            # self.times_values.append()
+            # self.times_values.append()
+
+        if not loop:
+            johnathan()
+            return
+
+        while self.running:
+            johnathan()
+
+        with open("out.json", "w") as out:
+            json.dump({
+                "x": [el[0] for el in self.times],
+                "y1": [el[1] for el in self.times],
+                "y2": [el[2] for el in self.times]
+            }, out)
 
     def update(self) -> None:
         """
@@ -103,11 +191,8 @@ class _Game:
         self.top_layer.fill((0, 0, 0, 0))
 
         # stuff
-        now = time.time()
+        now = time.perf_counter()
         delta = now - self.__last
-
-        # for the right feel
-        delta *= config.const.T_MULT
 
         self.__last_pressed_keys = self.__pressed_keys.copy()
 
@@ -150,16 +235,7 @@ class _Game:
         # put to mouse
         FollowsMouse.update(self.top_layer)
 
-        # calculate stuff
-        GravityAffected.calculate_gravity(delta)
-        FrictionAffected.calculate_friction(delta)
-        WallBouncer.update()
-
-        # update Updated group
-        Updated.update(delta)
-
-        # check for collisions
-        CollisionDestroyed.update()
+        # self.calculate_stuff(loop=False)
 
         # draw health bars
         HasBars.draw(self.top_layer)
@@ -169,7 +245,13 @@ class _Game:
             element[0].blit(element[1], (element[2].x, element[2].y))
 
         self.draw_world()
+
         Updated.draw(self.middle_layer)
+
+        lo = self.__to_loop.copy()
+        self.__to_loop.clear()
+        for element in lo:
+            element[0](*element[1], **element[2])
 
         # draw layers
         self._render_text()
@@ -179,6 +261,9 @@ class _Game:
 
         self.__last = now
 
+    def in_loop(self, function: tp.Callable, *args, **kwargs) -> None:
+        self.__to_loop.append((function, args, kwargs))
+
     def blit(self, surface: pg.Surface, image: pg.Surface, position: Vec2) -> tuple[pg.Surface, pg.Surface, Vec2]:
         self.__to_blit.append((surface, image, position))
         return surface, image, position
@@ -186,19 +271,27 @@ class _Game:
     def unblit(self, element: tuple[pg.Surface, pg.Surface, Vec2]) -> None:
         self.__to_blit.remove(element)
 
-    @staticmethod
-    def end() -> None:
+    def end(self) -> None:
         print(f"quitting...")
+        self.running = False
         pg.quit()
         exit()
 
 
 # should be the only instance of the class
-Game = _Game("./worlds/world1.json", config.const.WINDOW_SIZE)
+Game = _Game("./worlds/world_test.json", config.const.WINDOW_SIZE)
 
 
 # groups
 class _Players(pg.sprite.Group):
+    ...
+
+
+class _Bullets(pg.sprite.Group):
+    ...
+
+
+class _Rockets(pg.sprite.Group):
     ...
 
 
@@ -213,9 +306,9 @@ class _UpdatesToNetwork(pg.sprite.Group):
 
 
 class _NetworkUpdated(pg.sprite.Group):
-    def get_by_id(self, id: int):
+    def get_by_id(self, obj_id: int):
         for sprite in self.sprites():
-            if sprite.id == id:
+            if sprite.id == obj_id:
                 return sprite
 
 
@@ -230,7 +323,7 @@ class _GravityAffected(pg.sprite.Group):
             with suppress(AttributeError):
                 sprite: tp.Any
                 if not sprite.on_ground or sprite.velocity.y < 0:
-                    sprite.velocity.y += config.const.g * delta
+                    sprite.acceleration.y = config.const.g
                     continue
 
                 while sprite.on_ground:
@@ -282,27 +375,33 @@ class _CollisionDestroyed(pg.sprite.Group):
     kill() -> None
     """
     def update(self) -> None:
+        calculated: list[set] = []
         for sprite in self.sprites():
             with suppress(AttributeError):
                 for other in self.sprites():
                     sprite: tp.Any
                     other: tp.Any
-                    if all([
-                            pg.sprite.collide_mask(sprite, other),
-                            other != sprite,
-                            other.parent != sprite,
-                            sprite.parent != other
-                    ]):
-                        try:
-                            dmg = other.damage
+                    if not (sprite in Bullets and other in Bullets):
+                        if self.size_collide(sprite, other):
+                            if not {other, other.parent} & {sprite, sprite.parent} and {sprite, other} not in calculated:
+                                try:
+                                    dmg = other.damage
 
-                        except AttributeError:
-                            dmg = 0
+                                except AttributeError:
+                                    dmg = 0
 
-                        hp = sprite.hp
-                        sprite.hit(dmg)
-                        if dmg != 0:
-                            other.hit_someone(target_hp=hp)
+                                hp = sprite.hp
+                                sprite.hit(dmg)
+                                if dmg != 0:
+                                    other.hit_someone(target_hp=hp)
+
+                    calculated.append({sprite, other})
+
+    @staticmethod
+    def size_collide(sprite1, sprite2) -> bool:
+        # check for the first sprite to be in the second
+        collision_distance = sprite1.size + sprite2.size
+        return (sprite1.position_center - sprite2.position_center).length <= collision_distance
 
     def box_collide(self, other: pg.sprite.Sprite) -> tp.Iterator:
         for sprite in self.sprites():
@@ -322,14 +421,14 @@ class _HasBars(pg.sprite.Group):
         for sprite in self.sprites():
             with suppress(KeyError):
                 sprite: tp.Any
-                bar_height = 10
+                bar_height = sprite.screen_size / 10
 
                 # draw health bar
-                max_len = sprite.size
+                max_len = sprite.screen_size
                 now_len = (sprite.hp / sprite.max_hp) * max_len
 
-                bar_start = sprite.position.copy()
-                bar_start.x -= sprite.size / 2
+                bar_start = sprite.screen_position.copy()
+                bar_start.x -= sprite.screen_size / 2
 
                 pg.draw.rect(
                     surface,
@@ -400,6 +499,8 @@ class _WallBouncer(pg.sprite.Group):
 
 # create instances
 Players = _Players()
+Bullets = _Bullets()
+Rockets = _Rockets()
 Updated = _Updated()
 HasBars = _HasBars()
 WallBouncer = _WallBouncer()
@@ -410,3 +511,6 @@ UpdatesToNetwork = _UpdatesToNetwork()
 FrictionAffected = _FrictionAffected()
 FrictionXAffected = _FrictionXAffected()
 CollisionDestroyed = _CollisionDestroyed()
+
+
+_ERROR_FIXER = True

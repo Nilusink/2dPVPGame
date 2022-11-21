@@ -2,11 +2,12 @@
 Author:
 Nilusink
 """
-import configparser
+from contextlib import suppress
 from dataclasses import dataclass
 from threading import Timer
 from random import randint
 import numpy as np
+import math as m
 import time
 
 from core.animations import play_animation
@@ -19,6 +20,74 @@ from core.basegame import *
 SHOT: int = 0
 BULLET_UPDATE: int = 1
 PLAYER_UPDATE: int = 2
+
+# load images
+AK47_SIZE: int = 12
+MINIGUN_SIZE: int = 16
+ROCKET_SIZE: int = 64
+SNIPER_SIZE: int = 32
+AK47_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (AK47_SIZE, AK47_SIZE))
+MINIGUN_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (MINIGUN_SIZE, MINIGUN_SIZE))
+SNIPER_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (SNIPER_SIZE, SNIPER_SIZE))
+ROCKET_IMG = pg.transform.scale(pg.image.load("./images/weapons/rocket.png"), (ROCKET_SIZE, ROCKET_SIZE))
+JAVELIN_ON_IMG = pg.transform.scale(pg.image.load("./images/weapons/javelin_on.png"), (ROCKET_SIZE, ROCKET_SIZE))
+JAVELIN_OFF_IMG = pg.transform.scale(pg.image.load("./images/weapons/javelin.png"), (ROCKET_SIZE, ROCKET_SIZE))
+
+
+def calculate_launch_angle(position_delta: Vec2,
+                           target_velocity: Vec2,
+                           launch_speed: float,
+                           recalculate: int = 10,
+                           aim_type: str = "low") -> Vec2:
+    """
+    :param position_delta: the position delta between cannon and target
+    :param target_velocity: the current velocity of the target, pass empty Vec3 if no velocity is known
+    :param launch_speed: the projectile muzzle speed
+    :param recalculate: how often the position is being recalculated, basically a precision parameter
+    :param aim_type: either "high" - "h" or "low" - "l". Defines if the lower or higher curve should be aimed for
+    :return: where to aim
+    """
+    if recalculate < 0:
+        recalculate = 0
+
+    aim_type = max if aim_type.lower() in ("high", "h") else min
+
+    # constants
+    g = 9.81
+
+    # approximate where the target will be (this is not an exact method!!!)
+    a_time = position_delta.length / launch_speed
+    a_pos = position_delta + target_velocity * a_time
+
+    solutions: list[float] = []
+    for _ in range(recalculate + 1):
+        solutions.clear()
+
+        # calculate possible launch angles
+        x, y = a_pos.xy
+
+        a = (g / 2) * (x / launch_speed) ** 2
+        b = a + y
+
+        with suppress(ValueError):
+            z1 = (x + m.sqrt(x ** 2 - 4 * a * b)) / (2 * a)
+            solutions.append(m.atan(z1))
+
+        with suppress(ValueError):
+            z2 = (x - m.sqrt(x ** 2 - 4 * a * b)) / (2 * a)
+            solutions.append(m.atan(z2))
+
+        if not solutions:
+            raise ValueError("no possible launch angle found")
+
+        # recalculate the probable position of the target using the now calculated angle
+        angle = aim_type(solutions)
+        v_x = launch_speed * m.cos(angle)
+
+        a_time = x / v_x
+        a_pos = position_delta + target_velocity * a_time
+
+    return Vec2.from_polar(aim_type(solutions), 1)
 
 
 # Event class
@@ -74,13 +143,14 @@ class PlayerUpdate(Event):
 # Weapons
 class Bullet(pg.sprite.Sprite):
     reload_time: float
+    inaccuracy: float
     cooldown: float
     mag_size: int
     damage: float
     speed: float
     _size: int = 0
     parent: pg.sprite.Sprite
-    character_path: str
+    acceleration: Vec2
     last_angle: float
     velocity: Vec2
     rect: pg.Rect
@@ -90,8 +160,11 @@ class Bullet(pg.sprite.Sprite):
 
     def __init__(self, position: Vec2, direction: Vec2, parent: pg.sprite.Sprite, initial_velocity: Vec2 = Vec2()):
         super().__init__()
+        # mutable defaults init
+        self.acceleration = Vec2()
+
         self._position = position
-        self.velocity = direction
+        self.velocity = direction.copy()
         self.last_angle = 0
         self.parent = parent
 
@@ -102,26 +175,40 @@ class Bullet(pg.sprite.Sprite):
         self.velocity.length = self.speed
         self.velocity += initial_velocity.split_vector(direction)[0]
 
-        img = pg.image.load(self.character_path)
-        img = pg.transform.scale(img, (self._size, self._size))
-        self._original_image = img
-
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
-        self.last_angle = self.velocity.angle
-
         self.rect = pg.Rect(
             self._position.x - self._size / 2,
             self._position.y - self._size / 2,
             self._size,
             self._size
         )
+
+        orig_center = self.rect.center
+        # try:
+        self.image = pg.transform.rotate(self._original_image.copy(), -self.velocity.angle * (180 / config.const.PI))
+
+        # except pg.error:
+        #     self.image = self._original_image.copy()
+
+        self.rect = self.image.get_rect(center=orig_center)
+        self.last_angle = self.velocity.angle
+
         self.id = randint(0, 1_000_000_000)
 
-        self.add(Updated, CollisionDestroyed, FrictionAffected, GravityAffected, WallBouncer)
+        self.add(Updated, CollisionDestroyed, Bullets)
+
+        self.init_done = True
+
+    @property
+    def size(self) -> float:
+        return 0.07
 
     @property
     def position(self) -> Vec2:
         return self._position
+
+    @property
+    def position_center(self) -> Vec2:
+        return self.position + Vec2.from_cartesian(self.size/2, self.size/2)
 
     @property
     def on_ground(self) -> bool:
@@ -129,9 +216,10 @@ class Bullet(pg.sprite.Sprite):
 
     @property
     def out_of_bounds(self) -> bool:
-        return all([
-            not -200 < self._position.x < config.const.WINDOW_SIZE[0] + 200,
-            not -200 < self._position.y < config.const.WINDOW_SIZE[1] + 200,
+        # any looks cleaner as or and doesn't take any longer (;
+        return any([
+            not 0 < self.position_center.x < Game.world_bounds.x,
+            not 0 < self.position_center.y < Game.world_bounds.y,
         ])
 
     def get_nearest_player(self, exclude_parent: bool) -> tp.Union["Player", None]:
@@ -153,19 +241,27 @@ class Bullet(pg.sprite.Sprite):
         self._update(delta)
 
     def _update(self, delta: float) -> None:
+        self.velocity += self.acceleration * delta
         self._position += self.velocity * delta
 
         if self.out_of_bounds or self.on_ground:
             self.on_death()
 
-        self.image = pg.transform.rotate(self._original_image, -self.velocity.angle * (180 / config.const.PI))
+        orig_center = self.rect.center
+        # try:
+        self.image = pg.transform.rotate(self._original_image.copy(),
+                                         -self.velocity.angle * (180 / config.const.PI))
+
+        # except pg.error:
+        #     self.image = self._original_image.copy()
+        self.rect = self.image.get_rect(center=orig_center)
         self.last_angle = self.velocity.angle
 
         self.rect = pg.Rect(
             self._position.x - self._size / 2,
             self._position.y - self._size / 2,
             self._size,
-            self._size
+            self._size,
         )
 
     def hit(self, _damage: float) -> None:
@@ -182,12 +278,26 @@ class Bullet(pg.sprite.Sprite):
 
 class AK47(Bullet):
     character_path: str = "./images/weapons/bullet.png"
-    reload_time = config.const.BULLET_RELOAD_TIME
-    mag_size = config.const.BULLET_MAG_SIZE
-    cooldown = config.const.BULLET_COOLDOWN
-    damage = config.const.BULLET_DAMAGE
-    speed = config.const.BULLET_SPEED
-    _size = 16
+    reload_time = config.const.AK47_RELOAD_TIME
+    mag_size = config.const.AK47_MAG_SIZE
+    cooldown = config.const.AK47_COOLDOWN
+    damage = config.const.AK47_DAMAGE
+    _original_image = AK47_IMG.copy()
+    speed = config.const.AK47_SPEED
+    inaccuracy = 0.003
+    _size = AK47_SIZE
+
+
+class Minigun(Bullet):
+    character_path: str = "./images/weapons/bullet.png"
+    reload_time = config.const.MINIGUN_RELOAD_TIME
+    inaccuracy = config.const.MINIGUN_INACCURACY
+    mag_size = config.const.MINIGUN_MAG_SIZE
+    cooldown = config.const.MINIGUN_COOLDOWN
+    damage = config.const.MINIGUN_DAMAGE
+    _original_image = MINIGUN_IMG.copy()
+    speed = config.const.MINIGUN_SPEED
+    _size = MINIGUN_SIZE
 
 
 class Rocket(Bullet):
@@ -198,9 +308,33 @@ class Rocket(Bullet):
     cooldown: float = config.const.ROCKET_COOLDOWN
     exp_damage: float = config.const.ROCKET_DAMAGE  # damage for explosions
     speed: float = config.const.ROCKET_SPEED
+    _original_image = ROCKET_IMG.copy()
     damage: float = 10   # damage for direct hits
-    _size = 64
+    inaccuracy = 0
+    _size = ROCKET_SIZE
     hp = 2
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.remove(Bullets)
+        self.add(Rockets)
+
+    @property
+    def size(self) -> float:
+        return 2
+
+    @property
+    def position_center(self) -> Vec2:
+        return self.position + Vec2.from_cartesian(self._size/2, 0)
+
+    def update(self, *args, **kwargs):
+        pg.draw.circle(
+            surface=Game.top_layer,
+            color=(255, 0, 0, 255),
+            center=self.position_center.xy,
+            radius=10,
+        )
+        self._update(*args, **kwargs)
 
     def hit(self, damage: float) -> None:
         self.hp -= damage
@@ -235,28 +369,57 @@ class Rocket(Bullet):
         self.kill()
 
 
-class HomingRocket(Rocket):
-    acceleration: float = 5
-    speed = config.const.HOMING_ROCKET_SPEED
+class Javelin(Rocket):
+    mass: float
     cooldown = config.const.HOMING_ROCKET_COOLDOWN
     mag_size = config.const.HOMING_ROCKET_MAG_SIZE
     exp_damage = config.const.HOMING_ROCKET_DAMAGE
     reload_time = config.const.HOMING_ROCKET_RELOAD_TIME
-    character_path: str = "./images/weapons/homingrocket.png"
+
+    character_path: str = "./images/weapons/javelin.png"
+    on_character_path: str = "./images/weapons/javelin_on.png"
+    __flight_engine_table: list[tuple[float, float, float]]
+    __motor_turn_angle: float = config.const.PI / 2
+    _original_image = JAVELIN_OFF_IMG.copy()
+    __original_mass: float = 22.3
     __grad_per_sec: float = 60
-    __rad_per_sec: float
+    initialized: bool = False
     __events: list[Event]
+    __launch_time: float
+    __rad_per_sec: float
 
     def __init__(self, *args, **kwargs) -> None:
+        self.speed = .001
         super().__init__(*args, **kwargs)
         self.__rad_per_sec = self.__grad_per_sec * (config.const.PI / 180)
-
+        self._id = randint(0, 1_000_000_000)
+        self.mass = self.__original_mass
         self.__events = []
 
-        self._id = randint(0, 1_000_000_000)
+        # value 0 describes time, 1 describes the thrust in newtons and 2 the weight loss over time
+        self.__flight_engine_table = [
+            (0, 3000, 0),
+            (0.1, 0, 0),
+            (.5, 204.269, .048),
+            (1, 252.861, .102),
+            (1.5, 308.893, .168),
+            (2, 373.212, .245),
+            (2.5, 446.733, .336),
+            (3, 530.437, .444),
+            (3.5, 625.375, .569),
+            (4, 732.671, .781),
+            (5.2, 0, .781)
+        ]
+
+        self.__launch_time = time.perf_counter()
+
+        self._original_bup_image = self._original_image.copy()
+
+        self._original_on_image = JAVELIN_ON_IMG.copy()
 
         self.add(UpdatesToNetwork)
-        self.remove(GravityAffected)
+
+        self.initialized = True
 
     @property
     def events(self) -> list[Event]:
@@ -265,35 +428,55 @@ class HomingRocket(Rocket):
         return tmp
 
     def update(self, delta: float) -> None:
+        if not self.initialized:
+            return
+
+        now = time.perf_counter()
+        t_passed = now - self.__launch_time
+
         target: Player = self.get_nearest_player(exclude_parent=True)
-        if target:
+        vel_angle = self.velocity.angle
+        if target and t_passed > 0.3:
             position_delta = target.position_center - self.position
             angle_delta = self.velocity.angle - position_delta.angle
 
-            while angle_delta > 2*config.const.PI:
-                angle_delta -= 2*config.const.PI
-
-            end = self.position + Vec2.from_polar(angle=angle_delta+self.velocity.angle, length=50)
-            pg.draw.line(Game.top_layer, (255, 0, 0, 255), self.position.xy, end.xy)
-
-            end = self.position + Vec2.from_polar(angle=angle_delta, length=50)
-            pg.draw.line(Game.top_layer, (0, 0, 255, 255), self.position.xy, end.xy)
+            while angle_delta > 2 * config.const.PI:
+                angle_delta -= 2 * config.const.PI
 
             sign = 1
             if angle_delta > 0.001:
                 sign = -angle_delta / abs(angle_delta)
 
-            to_change = sign * self.__rad_per_sec * (delta / config.const.T_MULT)
+            to_change = sign * self.__motor_turn_angle  # self.__rad_per_sec * delta
 
-            if angle_delta > config.const.PI:
+            if angle_delta > config.const.PI or angle_delta < -config.const.PI:
                 to_change *= -1
 
-            end = self.position + Vec2.from_polar(angle=to_change, length=700)
-            pg.draw.line(Game.top_layer, (0, 255, 0, 255), self.position.xy, end.xy)
+            vel_angle = self.velocity.angle + to_change
 
-            self.velocity.angle += to_change
+        # launch motor
+        # filter out the correct line of the table
+        _ = thrust = weight_loss = 0
+        for elem in self.__flight_engine_table:
+            if elem[0] > t_passed:
+                break
 
-        self.velocity.length += self.acceleration * delta
+            t, thrust, weight_loss = elem
+
+        # F = m * a
+        # a = F / m
+        # v = a * dt
+        # calculate the current acceleration
+        self.mass = self.__original_mass - weight_loss
+        acceleration = thrust / self.mass
+        vec_acceleration = Vec2.from_polar(angle=vel_angle, length=acceleration)
+        self.velocity += vec_acceleration * delta
+
+        if acceleration != 0:
+            self._original_image = self._original_on_image
+
+        else:
+            self._original_image = self._original_bup_image
 
         self._update(delta)
 
@@ -301,11 +484,13 @@ class HomingRocket(Rocket):
 class Sniper(Bullet):
     character_path: str = "./images/weapons/bullet.png"
     reload_time = config.const.SNIPER_RELOAD_TIME
+    inaccuracy = config.const.SNIPER_INACCURACY
     mag_size = config.const.SNIPER_MAG_SIZE
     cooldown = config.const.SNIPER_COOLDOWN
     damage = config.const.SNIPER_DAMAGE
+    _original_image = MINIGUN_IMG.copy()
     speed = config.const.SNIPER_SPEED
-    _size = 32
+    _size = SNIPER_SIZE
 
 
 class WeaponHandler:
@@ -389,10 +574,11 @@ class WeaponHandler:
             self.__current_reload[self.weapon] = self.weapon.reload_time
             self.__current_mag[self.weapon] = self.weapon.mag_size
 
-    def shoot(self, direction: Vec2, inaccuracy: float) -> tuple[bool, Bullet | None, Vec2 | None]:
+    def shoot(self, direction: Vec2, inaccuracy: float, bullet_distance: float = 100) -> tuple[bool, Bullet | None, Vec2 | None]:
         """
         :param direction: the direction to shoot at
         :param inaccuracy: in rad, 0 to switch off
+        :param bullet_distance: the distance from the player the bullet spawns at
         """
         self.update_cooldown()
         if self.current_reload == 0 and self.current_cooldown == 0 and self.current_mag > 0:
@@ -400,7 +586,7 @@ class WeaponHandler:
             offset = (randint(-self.inaccuracy_resolution, self.inaccuracy_resolution) / self.inaccuracy_resolution)
             offset *= inaccuracy
             direction.angle += offset
-            direction.length = 100
+            direction.length = bullet_distance
 
             # calculate position
             pos = direction
@@ -433,6 +619,7 @@ class Player(pg.sprite.Sprite):
     mouse_center: Vec2
     bullet_offset: Vec2
     parent: pg.sprite.Sprite
+    acceleration: Vec2 = ...
     controls: tuple[str, str, str, str]
     max_speed: float = config.const.MAX_SPEED
     jump_speed: float = config.const.JUMP_SPEED
@@ -452,7 +639,7 @@ class Player(pg.sprite.Sprite):
     __events: list[dict]
     __controlled: bool
     __spawn: Vec2
-    __size: int = 32
+    size: int = 16
 
     def __init__(self,
                  spawn_point: Vec2,
@@ -464,11 +651,11 @@ class Player(pg.sprite.Sprite):
                  respawns: bool = False,
                  name: str = ""
                  ) -> None:
-
         if velocity is ...:
             velocity = Vec2()
 
         # init mutable defaults
+        self.acceleration = Vec2()
         self.__events = []
         self.__bullets = []
 
@@ -479,7 +666,7 @@ class Player(pg.sprite.Sprite):
             AK47,
             Sniper,
             Rocket,
-            HomingRocket
+            Javelin
         )
         w = self.__available_weapons[self.__weapon_index]
         self.__weapon = WeaponHandler(self, w)
@@ -509,10 +696,10 @@ class Player(pg.sprite.Sprite):
         self.__cooldown: list[float] = [0] * len(self.available_weapons)
 
         image = pg.image.load(self.character_path
-                              .replace("SIZE", str(self.__size))
+                              .replace("SIZE", str(self.size))
                               .replace("DIRECTION", self.facing)
                               )
-        self.image = pg.transform.scale(image, (self.__size, self.__size))
+        self.image = pg.transform.scale(image, (self.screen_size, self.screen_size))
         self.update_rect()
 
         # add to the player group
@@ -530,6 +717,14 @@ class Player(pg.sprite.Sprite):
     @property
     def position_center(self) -> Vec2:
         return self.position + Vec2.from_cartesian(0, -self.size / 2)
+
+    @property
+    def screen_position(self) -> Vec2:
+        return self.position * config.const.PIXELS_PER_METER
+
+    @property
+    def screen_size(self) -> Vec2:
+        return self.size * config.const.PIXELS_PER_METER
 
     @property
     def events(self) -> list[dict]:
@@ -575,10 +770,6 @@ class Player(pg.sprite.Sprite):
         self.weapon = self.available_weapons[self.weapon_index]
 
     @property
-    def size(self) -> int:
-        return self.__size
-
-    @property
     def facing(self) -> str:
         return self.__facing
 
@@ -601,7 +792,7 @@ class Player(pg.sprite.Sprite):
 
     @property
     def on_ground(self) -> bool:
-        return Game.on_floor(self.position) and self.velocity.y >= 0 and not self.__on_ground_override
+        return Game.on_floor(self.screen_position) and self.velocity.y >= 0 and not self.__on_ground_override
 
     @property
     def max_hp(self) -> float:
@@ -618,9 +809,9 @@ class Player(pg.sprite.Sprite):
     def set_max_hp(self, hp: float) -> None:
         self._max_hp = hp
 
-    def get_nearest_player(self) -> tp.Union["Player", None]:
+    def get_nearest_player(self) -> tp.Union["Player", Rocket, None]:
         closest_distance: float = np.inf
-        closest_player: Player | None = None
+        closest_player: Player | Rocket | None = None
         for player in Players.sprites():
             player: Player
             if player != self:
@@ -629,14 +820,24 @@ class Player(pg.sprite.Sprite):
                     closest_player = player
                     closest_distance = dist
 
+        for rocket in Rockets.sprites():
+            rocket: Rocket
+            if rocket.parent != self:
+                dist = abs((self.position - rocket.position).length)
+                if dist < closest_distance:
+                    closest_player = rocket
+                    closest_distance = dist
+
         return closest_player
 
     def update_rect(self) -> None:
-        self.rect = pg.Rect(self.position.x - self.size / 2, self.position.y - self.size, self.size, self.size)
+        actual_position = self.position * config.const.PIXELS_PER_METER
+        real_size = self.size * config.const.PIXELS_PER_METER
+        self.rect = pg.Rect(actual_position.x - real_size / 2, actual_position.y - real_size, real_size, real_size)
 
     def update(self, delta: float) -> None:
         for i, cooldown in enumerate(self.__cooldown):
-            self.__cooldown[i] = cooldown - delta / config.const.T_MULT if cooldown > 0 else 0
+            self.__cooldown[i] = cooldown - delta if cooldown > 0 else 0
 
         if self.__controlled:
             if Game.is_pressed(self.controls[0]):
@@ -695,7 +896,7 @@ class Player(pg.sprite.Sprite):
                 self.facing = "left"
 
         # update position
-        self.position += self.velocity * delta
+        self.position += self.velocity * delta * config.const.PIXELS_PER_METER
 
         # update on screen
         self.update_rect()
@@ -746,28 +947,80 @@ class Player(pg.sprite.Sprite):
 
 
 class Turret(Player):
-    activation_distance: float = 700
-    inaccuracy: float = 0.05
+    character_path: str = "./images/characters/turret/turret.png"
+    swing_range: float = config.const.PI / 500
+    activation_distance: float = 1300
+    aim_iterations: int = 20
     __max_hp: float = 100
+    size: float = 80
+    __start: float
+    sweep: bool
 
-    def __init__(self, position: Vec2, weapon: tp.Type[Bullet]) -> None:
+    def __init__(self, position: Vec2, weapon: tp.Type[Bullet], sweep: bool = True) -> None:
         super().__init__(position, controlled=False, shoots=False, respawns=False)
         self.remove(GravityAffected, FrictionXAffected)
         self.weapon_handler.auto_reload = True
         self.weapon = weapon
+        self.sweep = sweep
+
+        self.__start = time.perf_counter()
 
         # update hp
         self.set_max_hp(self.__max_hp)
         self.hp = self.__max_hp
 
-    def update(self, delta: float) -> None:
-        self.cooldown = self.cooldown - delta / config.const.T_MULT if self.cooldown > 0 else 0
+    @property
+    def position_center(self) -> Vec2:
+        return self.position + Vec2.from_cartesian(x=0, y=0)
 
+    def update(self, delta: float) -> None:
+        self.cooldown = self.cooldown - delta if self.cooldown > 0 else 0
         target = self.get_nearest_player()
         if target:
-            delta = target.position_center - self.position_center
-            if delta.length < self.activation_distance:
-                self.weapon_handler.shoot(delta, self.inaccuracy)
+            self.aim(target)
+
+    @print_traceback
+    def aim(self, target: Player) -> None:
+        delta = target.position_center - self.position_center
+
+        if delta.length < self.activation_distance:
+            # calculate where the object will be with the current velocity when the bullet hits
+            bs = self.weapon.speed
+
+            # if laser:
+            #     pg.draw.line(Game.top_layer, (255, 0, 0, 255), self.position_center.xy, target.position_center.xy)
+
+            try:
+                to_aim = calculate_launch_angle(target.position_center - self.position_center,
+                                                target.velocity,
+                                                launch_speed=bs)
+
+            except ValueError:
+                return
+
+            # bull(bullet_start, Vec2.from_polar(angle=ang, length=1), parent=pg.sprite.Sprite())
+            # mirrored position
+            to_aim_mirrored = to_aim.copy()
+            to_aim_mirrored.angle += config.const.PI
+            Game.in_loop(pg.draw.line, Game.top_layer, (0, 0, 255, 255), self.position_center.xy,
+                         (self.position_center + to_aim_mirrored).xy)
+
+            # aiming position
+            Game.in_loop(pg.draw.line, Game.top_layer, (255, 0, 0, 255), self.position_center.xy,
+                         (self.position_center + to_aim).xy)
+
+            # to_aim.angle = ang
+
+            # "sweep" motion
+            if self.sweep:
+                offset = np.sin((time.perf_counter()-self.__start) * 10) * self.swing_range
+
+                to_aim.angle += offset
+            self.weapon_handler.shoot(
+                direction=to_aim,
+                inaccuracy=self.weapon_handler.weapon.inaccuracy,
+                bullet_distance=50,
+            )
 
 
 class Scope(pg.sprite.Sprite):

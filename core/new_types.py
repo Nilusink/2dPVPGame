@@ -10,6 +10,29 @@ import numpy as np
 PI: float = 3.1415926535897932384626433832
 
 
+def calculate_shot(target_delta: "Vec2", bullet_speed: float) -> float:
+    """
+    calculate the shooting angle for a bullet to hit a target
+
+    :param target_delta: difference between the shooter and the target
+    :param bullet_speed: the bullets initial velocity
+    :return: the angle shoot at
+    """
+    shot_length = target_delta.length
+    x, y = target_delta.xy
+    v = bullet_speed
+    t = shot_length / v
+    a = np.arcsin((9.81 * t**2 + 2 * y) / (2 * t * v))
+
+    # for correct orientation
+    tmp = Vec2.from_polar(a, 1)
+    if target_delta.x < 0:
+        tmp.x *= -1
+
+    tmp.mirror(target_delta)
+    return tmp.angle
+
+
 class Vec2:
     x: float
     y: float
@@ -63,11 +86,7 @@ class Vec2:
         """
         value in radian
         """
-        while value > 2 * PI:
-            value -= 2 * PI
-
-        while value < 0:
-            value += 2 * PI
+        value = self.normalize_angle(value)
 
         self.__angle = value
         self.__update("p")
@@ -113,6 +132,16 @@ class Vec2:
             "angle": self.angle,
             "length": self.length,
         }
+
+    def normalize(self) -> "Vec2":
+        self.length = 1
+        return self
+
+    def mirror(self, mirror_by: "Vec2") -> "Vec2":
+        mirror_by = mirror_by.copy().normalize()
+        ang_d = mirror_by.angle - self.angle
+        self.angle = mirror_by.angle + 2 * ang_d
+        return self
 
     # maths
     def __add__(self, other):
@@ -188,6 +217,16 @@ class Vec2:
 
         else:
             raise KeyError("either (x & y) or (angle & length) must be in dict!")
+
+    @staticmethod
+    def normalize_angle(value: float) -> float:
+        while value > 2 * PI:
+            value -= 2 * PI
+
+        while value < 0:
+            value += 2 * PI
+
+        return value
 
 
 class BetterDict:

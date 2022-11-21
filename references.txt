@@ -1,0 +1,13 @@
+AK47: AK47
+    - Bullet: 7.62×39mm
+
+Minigun: Dillon M134D
+    - Bullet: 7.62x51mm NATO
+    - Accuracy: (relative, no exact measure found): precise hit at 1000 yards (calculated with a 10cm 'offset') - 0.0062659° - 0.0001093606 rad
+
+Sniper: Accuracy International AXMC
+    - Bullet: Lapua Magnum
+    - Accuracy: (janky, not researched): 0.0028648° - 0.0000500002 rad
+
+Homing Rocker: FGM-148 Javelin
+

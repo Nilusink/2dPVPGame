@@ -7,12 +7,18 @@ import pygame as pg
 import typing as tp
 
 
+def print_traceback(func: tp.Callable) -> tp.Callable:
+    def wrapper(*args, **kwargs):
+        ...
+
+
 class _Game:
     screen: pg.Surface
     lowest_layer: pg.Surface
     middle_layer: pg.Surface
     top_layer: pg.Surface
     font: pg.font.Font
+    world_bounds: Vec2
     __to_blit: list[pg.Surface, pg.Surface, Vec2]
     __registered_objects: list[pg.sprite.Sprite]
     __last_pressed_keys: dict[str, bool]
@@ -30,6 +36,7 @@ class _Game:
     def is_pressed(self, key: str) -> bool: ...
     def was_last_pressed(self, key: str) -> bool: ...
     def update(self) -> None: ...
+    def in_loop(self, function: tp.Callable, *args, **kwargs) -> None: ...
     def blit(self, surface: pg.Surface, image: pg.Surface, position: Vec2) -> tuple[pg.Surface, pg.Surface, Vec2]: ...
     def unblit(self, element: tuple[pg.Surface, pg.Surface, Vec2]) -> None: ...
     @staticmethod
@@ -41,6 +48,14 @@ Game: _Game
 
 # groups
 class _Players(pg.sprite.Group):
+    ...
+
+
+class _Bullets(pg.sprite.Group):
+    ...
+
+
+class _Rockets(pg.sprite.Group):
     ...
 
 
@@ -121,6 +136,8 @@ class _WallBouncer(pg.sprite.Group):
 
 # create instances
 Players: _Players
+Bullets: _Bullets
+Rockets: _Rockets
 Updated: _Updated
 HasBars: _HasBars
 WallBouncer: _WallBouncer
