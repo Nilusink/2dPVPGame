@@ -23,10 +23,12 @@ PLAYER_UPDATE: int = 2
 
 # load images
 AK47_SIZE: int = 12
-MINIGUN_SIZE: int = 16
+CIWS_SIZE: int = 18
 ROCKET_SIZE: int = 64
 SNIPER_SIZE: int = 32
+MINIGUN_SIZE: int = 14
 AK47_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (AK47_SIZE, AK47_SIZE))
+CIWS_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (CIWS_SIZE, CIWS_SIZE))
 MINIGUN_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (MINIGUN_SIZE, MINIGUN_SIZE))
 SNIPER_IMG = pg.transform.scale(pg.image.load("./images/weapons/bullet.png"), (SNIPER_SIZE, SNIPER_SIZE))
 ROCKET_IMG = pg.transform.scale(pg.image.load("./images/weapons/rocket.png"), (ROCKET_SIZE, ROCKET_SIZE))
@@ -300,6 +302,18 @@ class Minigun(Bullet):
     _size = MINIGUN_SIZE
 
 
+class CIWS(Bullet):
+    character_path: str = "./images/weapons/bullet.png"
+    reload_time = config.const.CIWS_RELOAD_TIME
+    inaccuracy = config.const.CIWS_INACCURACY
+    mag_size = config.const.CIWS_MAG_SIZE
+    cooldown = config.const.CIWS_COOLDOWN
+    damage = config.const.CIWS_DAMAGE
+    _original_image = CIWS_IMG.copy()
+    speed = config.const.CIWS_SPEED
+    _size = CIWS_SIZE
+
+
 class Rocket(Bullet):
     explosion_animation: str = "./images/animations/explosion/"
     character_path: str = "./images/weapons/rocket.png"
@@ -312,16 +326,26 @@ class Rocket(Bullet):
     damage: float = 10   # damage for direct hits
     inaccuracy = 0
     _size = ROCKET_SIZE
+    max_hp = 2
     hp = 2
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.remove(Bullets)
         self.add(Rockets)
+        self.add(HasHP)
 
     @property
     def size(self) -> float:
         return 2
+
+    @property
+    def screen_size(self) -> float:
+        return self.size * config.const.PIXELS_PER_METER
+
+    @property
+    def screen_position(self) -> Vec2:
+        return self.position * config.const.PIXELS_PER_METER
 
     @property
     def position_center(self) -> Vec2:
@@ -625,6 +649,9 @@ class Player(pg.sprite.Sprite):
     jump_speed: float = config.const.JUMP_SPEED
     character_path: str = "./images/characters/amogus/amogusSIZEDIRECTION.png"
 
+    # protected
+    _on_death_func: tp.Callable = None
+
     # private
     __weapon_indicator: "WeaponIndicator"
     _max_hp: float = config.const.MAX_HP
@@ -723,7 +750,7 @@ class Player(pg.sprite.Sprite):
         return self.position * config.const.PIXELS_PER_METER
 
     @property
-    def screen_size(self) -> Vec2:
+    def screen_size(self) -> int:
         return self.size * config.const.PIXELS_PER_METER
 
     @property
@@ -885,7 +912,7 @@ class Player(pg.sprite.Sprite):
 
         # check if out of map
         if self.position.y > config.const.WINDOW_SIZE[1] + 200:
-            self.on_death()
+            self._on_death()
 
         # face the direction you're heading
         if self.velocity.x:
@@ -924,12 +951,21 @@ class Player(pg.sprite.Sprite):
     def hit(self, damage: float) -> None:
         self.hp -= damage
         if self.hp <= 0:
-            self.on_death()
+            self._on_death()
 
-    def on_death(self) -> None:
+    def on_death(self, func: tp.Callable) -> None:
+        """
+        The given function will be executed on the players death
+        """
+        self._on_death_func = func
+
+    def _on_death(self) -> None:
         self.kill()
         if self.respawns:
             Timer(4.20, self.revive).start()
+
+        if self._on_death_func:
+            self._on_death_func()
 
     def revive(self) -> None:
         print(f"revived")
@@ -948,15 +984,21 @@ class Player(pg.sprite.Sprite):
 
 class Turret(Player):
     character_path: str = "./images/characters/turret/turret.png"
+    activation_distance: float = config.const.CIWS_MAX_RANGE
+    max_turn_rate: float = config.const.CIWS_ANGLE_SPEED
     swing_range: float = config.const.PI / 500
-    activation_distance: float = 1300
     aim_iterations: int = 20
     __max_hp: float = 100
+    _to_face: Vec2 = ...
+    _facing: Vec2 = ...
     size: float = 80
     __start: float
     sweep: bool
 
     def __init__(self, position: Vec2, weapon: tp.Type[Bullet], sweep: bool = True) -> None:
+        self._facing = Vec2.from_polar(config.const.PI / 2, 1)
+        self._to_face = self._facing.copy()
+
         super().__init__(position, controlled=False, shoots=False, respawns=False)
         self.remove(GravityAffected, FrictionXAffected)
         self.weapon_handler.auto_reload = True
@@ -969,6 +1011,16 @@ class Turret(Player):
         self.set_max_hp(self.__max_hp)
         self.hp = self.__max_hp
 
+        # set image
+        image = pg.image.load(self.character_path)
+        self.initial_image = pg.transform.scale(image, (self.screen_size, self.screen_size))
+        self.image = self.initial_image.copy()
+
+        end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) - (self._facing * 60)
+        pg.draw.line(self.image, color=(255, 0, 0, 1), start_pos=(self.screen_size/2, self.screen_size), end_pos=end_pos.xy, width=5)
+
+        self.update_rect()
+
     @property
     def position_center(self) -> Vec2:
         return self.position + Vec2.from_cartesian(x=0, y=0)
@@ -976,8 +1028,32 @@ class Turret(Player):
     def update(self, delta: float) -> None:
         self.cooldown = self.cooldown - delta if self.cooldown > 0 else 0
         target = self.get_nearest_player()
+
         if target:
             self.aim(target)
+
+        if self._to_face.angle != self._facing.angle:
+
+            diff = self._to_face.angle - self._facing.angle
+            if abs(diff) > self.max_turn_rate * delta:
+                diff = self.max_turn_rate * (diff / abs(diff)) * delta
+
+            angle = self._facing.angle + diff
+
+            self._facing = Vec2.from_polar(angle, 1)
+
+            # update image
+            self.image = self.initial_image.copy()
+
+            end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) + (self._facing * 50)
+            pg.draw.line(
+                self.image,
+                color=(0, 0, 0),
+                start_pos=(self.screen_size / 2, self.screen_size),
+                end_pos=end_pos.xy,
+                width=10,
+            )
+
 
     @print_traceback
     def aim(self, target: Player) -> None:
@@ -991,9 +1067,11 @@ class Turret(Player):
             #     pg.draw.line(Game.top_layer, (255, 0, 0, 255), self.position_center.xy, target.position_center.xy)
 
             try:
-                to_aim = calculate_launch_angle(target.position_center - self.position_center,
-                                                target.velocity,
-                                                launch_speed=bs)
+                to_aim = calculate_launch_angle(
+                    target.position_center - self.position_center,
+                    target.velocity,
+                    launch_speed=bs,
+                )
 
             except ValueError:
                 return
@@ -1016,10 +1094,17 @@ class Turret(Player):
                 offset = np.sin((time.perf_counter()-self.__start) * 10) * self.swing_range
 
                 to_aim.angle += offset
+
+            self._to_face = to_aim.copy()
+            self._to_face.normalize()
+
+            if abs(self._to_face.angle - self._facing.angle) > 0.1:
+                return
+
             self.weapon_handler.shoot(
-                direction=to_aim,
+                direction=self._facing.copy().normalize(),
                 inaccuracy=self.weapon_handler.weapon.inaccuracy,
-                bullet_distance=50,
+                bullet_distance=60,
             )
 
 

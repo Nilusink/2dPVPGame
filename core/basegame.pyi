@@ -134,7 +134,13 @@ class _WallBouncer(pg.sprite.Group):
     def update(self) -> None: ...
 
 
+class _HasHP(pg.sprite.Group):
+    def draw(self, surface: pg.Surface) -> None:
+        ...
+
+
 # create instances
+HasHP: _HasHP
 Players: _Players
 Bullets: _Bullets
 Rockets: _Rockets

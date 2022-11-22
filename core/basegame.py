@@ -238,6 +238,7 @@ class _Game:
         # self.calculate_stuff(loop=False)
 
         # draw health bars
+        HasHP.draw(self.top_layer)
         HasBars.draw(self.top_layer)
 
         # draw updated objects and world
@@ -474,6 +475,36 @@ class _HasBars(pg.sprite.Group):
                 )
 
 
+class _HasHP(pg.sprite.Group):
+    def draw(self, surface: pg.Surface) -> None:
+        for sprite in self.sprites():
+            with suppress(KeyError):
+                sprite: tp.Any
+                bar_height = 2
+
+                # don't draw if full hp
+                if sprite.hp == sprite.max_hp:
+                    continue
+
+                # draw health bar
+                max_len = 10
+                now_len = (sprite.hp / sprite.max_hp) * max_len
+
+                bar_start = sprite.screen_position.copy()
+                bar_start.x -= sprite.screen_size / 2
+
+                pg.draw.rect(
+                    surface,
+                    (0, 0, 0, 128),
+                    pg.Rect(*bar_start.xy, max_len, bar_height)
+                )
+                pg.draw.rect(
+                    surface,
+                    (0, 255, 0, 255),
+                    pg.Rect(*bar_start.xy, now_len, bar_height)
+                )
+
+
 class _WallBouncer(pg.sprite.Group):
     """
     required methods / variables:
@@ -498,6 +529,7 @@ class _WallBouncer(pg.sprite.Group):
 
 
 # create instances
+HasHP = _HasHP()
 Players = _Players()
 Bullets = _Bullets()
 Rockets = _Rockets()

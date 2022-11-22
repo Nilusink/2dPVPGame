@@ -9,5 +9,14 @@ Sniper: Accuracy International AXMC
     - Bullet: Lapua Magnum
     - Accuracy: (janky, not researched): 0.0028648° - 0.0000500002 rad
 
-Homing Rocker: FGM-148 Javelin
+Homing Rocket: FGM-148 Javelin
 
+Turret: American CIWS
+    - Gun: 1×20 mm M61 Vulcan 6-barreled Gatling cannon
+    - Detection Range: 9000m
+    - Effective firing range	1,625 yd (1,486 m)
+    - Muzzle velocity	3,600 ft/s (1,100 m/s)
+    - Maximum firing range	6,000 yd (5,500 m)
+    - Speed: 4500 rounds/min - 1 round / .013s
+    - source: http://www.navweaps.com/Weapons/WNUS_Phalanx.php
+    - angle acc: 8rad/s²

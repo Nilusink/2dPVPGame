@@ -54,13 +54,15 @@ def main() -> None:
     #     weapon=Minigun,
     # )
 
-    Turret(
+    t = Turret(
         position=Vec2.from_cartesian(
             x=50,
             y=950
         ),
-        weapon=Minigun
+        weapon=CIWS,
+        sweep=True,
     )
+    t.respawns = True
 
     Javelin(
         Vec2.from_cartesian(944-300, 20),
@@ -83,6 +85,16 @@ def main() -> None:
         Vec2.from_cartesian(x=0, y=1),
         pg.sprite.Sprite()
     )
+    Rocket(
+        Vec2.from_cartesian(300, 0),
+        Vec2.from_cartesian(x=0, y=1),
+        pg.sprite.Sprite()
+    )
+    Rocket(
+        Vec2.from_cartesian(1000, 0),
+        Vec2.from_cartesian(x=0, y=1),
+        pg.sprite.Sprite()
+    )
 
     Javelin(
         Vec2.from_cartesian(944, 0),
@@ -98,6 +110,16 @@ def main() -> None:
 
     Javelin(
         Vec2.from_cartesian(944+300, 20),
+        Vec2.from_cartesian(x=0, y=1),
+        pg.sprite.Sprite()
+    )
+    Javelin(
+        Vec2.from_cartesian(944+400, 20),
+        Vec2.from_cartesian(x=0, y=1),
+        pg.sprite.Sprite()
+    )
+    Javelin(
+        Vec2.from_cartesian(944+500, 20),
         Vec2.from_cartesian(x=0, y=1),
         pg.sprite.Sprite()
     )
