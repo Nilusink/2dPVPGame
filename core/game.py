@@ -693,7 +693,7 @@ class Player(pg.sprite.Sprite):
             AK47,
             Sniper,
             Rocket,
-            Javelin
+            Javelin,
         )
         w = self.__available_weapons[self.__weapon_index]
         self.__weapon = WeaponHandler(self, w)
@@ -923,6 +923,7 @@ class Player(pg.sprite.Sprite):
                 self.facing = "left"
 
         # update position
+        self.velocity += self.acceleration * delta
         self.position += self.velocity * delta * config.const.PIXELS_PER_METER
 
         # update on screen
@@ -996,7 +997,7 @@ class Turret(Player):
     sweep: bool
 
     def __init__(self, position: Vec2, weapon: tp.Type[Bullet], sweep: bool = True) -> None:
-        self._facing = Vec2.from_polar(config.const.PI / 2, 1)
+        self._facing = Vec2.from_polar(-config.const.PI / 2, 1)
         self._to_face = self._facing.copy()
 
         super().__init__(position, controlled=False, shoots=False, respawns=False)
@@ -1016,8 +1017,14 @@ class Turret(Player):
         self.initial_image = pg.transform.scale(image, (self.screen_size, self.screen_size))
         self.image = self.initial_image.copy()
 
-        end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) - (self._facing * 60)
-        pg.draw.line(self.image, color=(255, 0, 0, 1), start_pos=(self.screen_size/2, self.screen_size), end_pos=end_pos.xy, width=5)
+        end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) + (self._facing * 40)
+        pg.draw.line(
+            self.image,
+            color=(30, 30, 30),
+            start_pos=(self.screen_size / 2, self.screen_size),
+            end_pos=end_pos.xy,
+            width=10,
+        )
 
         self.update_rect()
 
@@ -1025,9 +1032,30 @@ class Turret(Player):
     def position_center(self) -> Vec2:
         return self.position + Vec2.from_cartesian(x=0, y=0)
 
+    def get_target(self) -> tp.Union["Player", Rocket, None]:
+        closest_distance: float = np.inf
+        closest_player: Player | Rocket | None = None
+        for player in Players.sprites():
+            player: Player
+            if player != self and not issubclass(type(player), Turret):
+                dist = abs((self.position - player.position).length)
+                if dist < closest_distance:
+                    closest_player = player
+                    closest_distance = dist
+
+        for rocket in Rockets.sprites():
+            rocket: Rocket
+            if rocket.parent != self and not issubclass(type(rocket), Turret):
+                dist = abs((self.position - rocket.position).length)
+                if dist < closest_distance:
+                    closest_player = rocket
+                    closest_distance = dist
+
+        return closest_player
+
     def update(self, delta: float) -> None:
         self.cooldown = self.cooldown - delta if self.cooldown > 0 else 0
-        target = self.get_nearest_player()
+        target = self.get_target()
 
         if target:
             self.aim(target)
@@ -1045,15 +1073,14 @@ class Turret(Player):
             # update image
             self.image = self.initial_image.copy()
 
-            end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) + (self._facing * 50)
+            end_pos = Vec2.from_cartesian(self.screen_size / 2, self.screen_size) + (self._facing * 40)
             pg.draw.line(
                 self.image,
-                color=(0, 0, 0),
+                color=(30, 30, 30),
                 start_pos=(self.screen_size / 2, self.screen_size),
                 end_pos=end_pos.xy,
                 width=10,
             )
-
 
     @print_traceback
     def aim(self, target: Player) -> None:
@@ -1066,12 +1093,26 @@ class Turret(Player):
             # if laser:
             #     pg.draw.line(Game.top_layer, (255, 0, 0, 255), self.position_center.xy, target.position_center.xy)
 
+            delta = target.position_center - self.position
+
             try:
-                to_aim = calculate_launch_angle(
-                    target.position_center - self.position_center,
-                    target.velocity,
-                    launch_speed=bs,
-                )
+                if delta.angle < -config.const.PI/2 or delta.angle > config.const.PI/2:
+                    delta.x *= -1
+                    tv = target.velocity.copy()
+                    tv.x *= -1
+                    to_aim = calculate_launch_angle(
+                        delta,
+                        tv,
+                        launch_speed=bs,
+                    )
+                    to_aim.x *= -1
+
+                else:
+                    to_aim = calculate_launch_angle(
+                        delta,
+                        target.velocity,
+                        launch_speed=bs,
+                    )
 
             except ValueError:
                 return

@@ -43,18 +43,18 @@ def main() -> None:
     #         x=1920/2,
     #         y=1080/2,
     #     ),
-    #     weapon=Minigun,
+    #     weapon=Javelin,
     # )
-
+    #
     # Turret(
     #     position=Vec2.from_cartesian(
     #         x=200,
     #         y=950
     #     ),
-    #     weapon=Minigun,
+    #     weapon=AK47,
     # )
 
-    t = Turret(
+    t0 = Turret(
         position=Vec2.from_cartesian(
             x=50,
             y=950
@@ -62,7 +62,27 @@ def main() -> None:
         weapon=CIWS,
         sweep=True,
     )
-    t.respawns = True
+    t0.respawns = True
+    
+    t1 = Turret(
+        position=Vec2.from_cartesian(
+            x=960,
+            y=950
+        ),
+        weapon=CIWS,
+        sweep=True,
+    )
+    t1.respawns = True
+
+    t2 = Turret(
+        position=Vec2.from_cartesian(
+            x=1870,
+            y=950
+        ),
+        weapon=CIWS,
+        sweep=True,
+    )
+    t2.respawns = True
 
     Javelin(
         Vec2.from_cartesian(944-300, 20),

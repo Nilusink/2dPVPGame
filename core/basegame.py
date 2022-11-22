@@ -319,7 +319,7 @@ class _GravityAffected(pg.sprite.Group):
     velocity: Vec2
     position: Vec2
     """
-    def calculate_gravity(self, delta: float) -> None:
+    def calculate_gravity(self, _delta: float) -> None:
         for sprite in self.sprites():
             with suppress(AttributeError):
                 sprite: tp.Any
