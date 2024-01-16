@@ -14,21 +14,21 @@ def main() -> None:
     # server = Connection(
     #     (config.dyn.server_ip, 12345)
     # )
-    # main_player = Player(spawn_point=Vec2.from_cartesian(
-    #     x=100,
-    #     y=100
-    # ),
-    #     controlled=True,
-    #     controls=(
-    #     "d",
-    #     "a",
-    #     "SPACE",
-    #     "s"
-    # ),
-    #     shoots=True,
-    #     respawns=True,
-    #     name=str(randint(1, 10000000))
-    # )
+#     main_player = Player(spawn_point=Vec2.from_cartesian(
+#         x=100,
+#         y=100
+#     ),
+#         controlled=True,
+#         controls=(
+#         "d",
+#         "a",
+#         "SPACE",
+#        "s"
+#    ),
+#         shoots=True,
+#         respawns=True,
+#         name=str(randint(1, 10000000))
+#     )
     # dummy = Player(
     #     spawn_point=Vec2.from_cartesian(
     #         x=1000,
@@ -57,22 +57,22 @@ def main() -> None:
     t0 = Turret(
         position=Vec2.from_cartesian(
             x=50,
-            y=950
+            y=700
         ),
-        weapon=CIWS,
+        weapon=AK47,
         sweep=True,
     )
-    t0.respawns = True
+    t0.respawns = False
     
     t1 = Turret(
         position=Vec2.from_cartesian(
             x=960,
             y=950
         ),
-        weapon=CIWS,
+        weapon=Sniper,
         sweep=True,
     )
-    t1.respawns = True
+    t1.respawns = False
 
     t2 = Turret(
         position=Vec2.from_cartesian(
@@ -82,7 +82,7 @@ def main() -> None:
         weapon=CIWS,
         sweep=True,
     )
-    t2.respawns = True
+    t2.respawns = False
 
     Javelin(
         Vec2.from_cartesian(944-300, 20),
@@ -91,18 +91,24 @@ def main() -> None:
     )
 
     Rocket(
+        Vec2.from_cartesian(400, 0),
+        Vec2.from_cartesian(x=1.55, y=1),
+        pg.sprite.Sprite()
+    )
+
+    Rocket(
         Vec2.from_cartesian(50, 0),
-        Vec2.from_cartesian(x=0, y=1),
+        Vec2.from_cartesian(x=1, y=1),
         pg.sprite.Sprite()
     )
     Rocket(
         Vec2.from_cartesian(30, 0),
-        Vec2.from_cartesian(x=0, y=1),
+        Vec2.from_cartesian(x=1, y=1),
         pg.sprite.Sprite()
     )
     Rocket(
         Vec2.from_cartesian(70, 0),
-        Vec2.from_cartesian(x=0, y=1),
+        Vec2.from_cartesian(x=1, y=1),
         pg.sprite.Sprite()
     )
     Rocket(
@@ -111,8 +117,8 @@ def main() -> None:
         pg.sprite.Sprite()
     )
     Rocket(
-        Vec2.from_cartesian(1000, 0),
-        Vec2.from_cartesian(x=0, y=1),
+        Vec2.from_cartesian(1800, 0),
+        Vec2.from_cartesian(x=-0.9, y=1),
         pg.sprite.Sprite()
     )
 
@@ -122,11 +128,11 @@ def main() -> None:
         pg.sprite.Sprite()
     )
 
-    Javelin(
-        Vec2.from_cartesian(1500, 900),
-        Vec2.from_cartesian(x=1, y=-1),
-        pg.sprite.Sprite()
-    )
+    #Javelin(
+    #    Vec2.from_cartesian(1500, 900),
+    #    Vec2.from_cartesian(x=1, y=-1),
+    #    pg.sprite.Sprite()
+    #)
 
     Javelin(
         Vec2.from_cartesian(944+300, 20),

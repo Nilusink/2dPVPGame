@@ -246,8 +246,15 @@ class Bullet(pg.sprite.Sprite):
         self.velocity += self.acceleration * delta
         self._position += self.velocity * delta
 
-        if self.out_of_bounds or self.on_ground:
+        if self.out_of_bounds:
             self.on_death()
+
+        if self.on_ground:
+            self.velocity.y *= -1
+            self._position += self.velocity * delta
+            self.velocity.length *= .2
+
+#            self._position += self.velocity * delta
 
         orig_center = self.rect.center
         # try:
@@ -358,6 +365,11 @@ class Rocket(Bullet):
             center=self.position_center.xy,
             radius=10,
         )
+
+        if self.on_ground:
+            self.on_death()
+            return
+
         self._update(*args, **kwargs)
 
     def hit(self, damage: float) -> None:
